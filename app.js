@@ -362,13 +362,53 @@ function detail(r) {
     ${note}<ol class="chain">${s1}${s2}${s3}${s4}</ol></aside>`;
 }
 
-/* ---------- CALIBRATION (T5 — not yet implemented in this commit) ---------- */
-function calibration() { return `<div class=\"empty\">${icon('hourglass', 24)}<div><strong>Calibration not yet implemented</strong>Lands in a follow-up commit (T5).</div></div>`; }
+/* ---------- CALIBRATION (T5) ---------- */
+function calibration() {
+  const data = CAL_SAMPLE, mids = [0.55, 0.65, 0.75, 0.85, 0.95];
+  const okN = data.filter(b => b[1] >= LIMITS.minN).length;
+  const trs = data.map((b, i) => {
+    const n = b[1], ok = n >= LIMITS.minN, wr = n ? b[2] / n : null;
+    const status = n === 0 ? `<span class="bd nd2">${icon('hourglass', 12)}NO DATA</span>` : ok ? `<span class="bd neu">${icon('check', 12)}SUFFICIENT</span>` : `<span class="bd nd2">${icon('hourglass', 12)}INSUFFICIENT · n&lt;${LIMITS.minN}</span>`;
+    const gap = ok ? wr - mids[i] : null;
+    return `<tr><td><b>${esc(b[0])}</b></td><td class="r">${n}</td><td><div class="nbar ${ok ? 'ok' : ''}" role="img" aria-label="n ${n} of ${LIMITS.minN} required"><i style="width:${Math.min(100, n / LIMITS.minN * 100)}%"></i></div></td><td class="r">${wr === null ? '<span class="nd">—</span>' : pct(wr)}</td><td class="r hide-sm">${gap === null ? '<span class="nd">—</span>' : (gap >= 0 ? '+' : '−') + Math.abs(gap * 100).toFixed(1) + ' pp'}</td><td>${status}</td></tr>`;
+  }).join('');
+  return `<div class="card glow"><h2>Judge calibration · live-arming evidence</h2>
+      <div class="num n56" style="margin-top:12px">${okN} of ${data.length} <span class="den" style="font-size:20px">buckets usable</span></div>
+      <p class="tx2" style="margin:12px 0 0;max-width:70ch">A bucket needs n ≥ ${LIMITS.minN} before it counts. Smaller buckets are drawn hollow and hatched, labelled insufficient, and left out of the line. Sample aggregate — not derived from the journal rows.</p></div>
+  <div class="calgrid"><div class="card"><div data-cal></div></div>
+  <div class="card" style="padding:0"><div class="scroll"><table class="tbl cal"><thead><tr><th>Stated p</th><th class="r">n</th><th>n vs ${LIMITS.minN}</th><th class="r">Win rate</th><th class="r hide-sm">vs midpoint</th><th>Status</th></tr></thead><tbody>${trs}</tbody></table></div>
+    <p class="nd" style="margin:0;padding:16px 20px">Win rate is the share of filled trades in the bucket that closed in profit. Blocked and venue-rejected attempts are not counted.</p></div></div>`;
+}
 
-/* ---------- RISK (T6/T7 — not yet implemented in this commit) ---------- */
+/* ---------- RISK (T6 read-only; T7 arm/kill shipped disabled) ---------- */
 function fmtCd(s) { return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
-function cdText() { return state.cooldown > 0 ? fmtCd(state.cooldown) : '<span class=\"pos gl\">' + icon('check', 16) + 'READY</span>'; }
-function risk() { return `<div class=\"empty\">${icon('hourglass', 24)}<div><strong>Risk state not yet implemented</strong>Lands in a follow-up commit (T6, with T7 gated).</div></div>`; }
+function cdText() { return state.cooldown > 0 ? fmtCd(state.cooldown) : '<span class="pos gl">' + icon('check', 16) + 'READY</span>'; }
+function risk() {
+  const used = rollingUsed(), p = used / LIMITS.daily;
+  // T7 GATED: buttons render disabled and carry no click handler; FEATURE_T7_ENABLED stays false until owner approval + real wiring.
+  const gateNote = `<p class="gated-note">${icon('lock', 14)}<span>Arm and kill controls are disabled in this build (T7 gated — requires owner approval before any wiring to a real venue).</span></p>`;
+  return `<div class="grid">
+    <section class="card glow c4"><h2>Arming flag · session only</h2>
+      <div style="margin:16px 0 8px"><span class="num n36">${armWord(28)}</span></div>
+      ${gateNote}
+      <p class="tx2" style="margin:0 0 16px">Held in memory only. Never persisted as true — a restart always returns to DISARMED.</p>
+      <button type="button" class="btn pri" ${FEATURE_T7_ENABLED ? '' : 'disabled aria-disabled="true"'} title="Disabled in v1 (T7 gated)">Arm…</button></section>
+    <section class="card c4"><h2>Kill switch</h2>
+      <div style="margin:16px 0 8px">${killStatus(28)}</div>
+      ${gateNote}
+      <p class="tx2" style="margin:0 0 16px">Engaging it would stop every new order from dispatching. Not wired in this build.</p>
+      <button type="button" class="btn dng" ${FEATURE_T7_ENABLED ? '' : 'disabled aria-disabled="true"'} title="Disabled in v1 (T7 gated)">${icon('bang', 16)} Engage kill switch…</button></section>
+    <section class="card c4"><h2>Order limits</h2>
+      <div class="gate-row"><div class="row"><span class="lbl">Per-order cap</span><span class="num n20 nw">${usd(LIMITS.perOrder)}</span></div></div>
+      <div class="gate-row"><div class="row"><span class="lbl">Cooldown</span><span class="num n20 nw cdv">${cdText()}</span></div><div class="nd">mm:ss until the next order is eligible (sample timer)</div></div>
+      <div class="gate-row"><div class="row"><span class="lbl">Judge threshold</span><span class="num n20 nw">${LIMITS.judgeMin.toFixed(2)}</span></div></div></section>
+    <section class="card glow c12"><h2>Rolling 24h cap consumption</h2>
+      <div class="base" style="margin:12px 0 16px"><span class="num n56 nw">${usd(used)}</span><span class="den nw" style="font-size:20px">/ ${usd(LIMITS.daily)}</span></div>
+      <div role="meter" aria-label="Rolling 24 hour cap consumption" aria-valuemin="0" aria-valuemax="${LIMITS.daily}" aria-valuenow="${used.toFixed(2)}">${ticksHtml(p, 60)}</div>
+      <div class="row" style="margin-top:12px"><span class="tx2">${pct(p)} used · ${usd(Math.max(0, LIMITS.daily - used))} remaining</span>${p >= .7 ? `<span class="bd blk">${icon('slash', 12)}APPROACHING CAP</span>` : '<span class="tx2">within limit</span>'}</div></section>
+  </div>`;
+}
+
 /* ---------- render + wiring (no network listeners anywhere; all state is local) ---------- */
 function render() {
   renderChrome();
