@@ -277,10 +277,91 @@ function drawCharts() {
   $$('[data-cal]').forEach(el => { el.innerHTML = calSvg(CAL_SAMPLE, Math.max(300, Math.min(600, Math.floor(el.clientWidth)))); });
 }
 
-/* ---------- JOURNAL (T3/T4 — not yet implemented in this commit) ---------- */
-function filtered() { return []; }
-function journal() { return `<div class=\"empty\">${icon('hourglass', 24)}<div><strong>Journal not yet implemented</strong>Lands in a follow-up commit (T3/T4).</div></div>`; }
-function detail(r) { return ''; }
+/* ---------- JOURNAL (T3/T4) ---------- */
+function filtered() {
+  const f = state.f;
+  return state.rows.filter(r =>
+    (f.outcome === 'all' || (f.outcome === 'blocked' ? OUT[r.outcome].kind === 'blk' : r.outcome === f.outcome)) &&
+    (f.venue === 'all' || r.venue === f.venue) && (f.symbol === 'all' || r.symbol === f.symbol) &&
+    (!f.from || r.ts.slice(0, 10) >= f.from) && (!f.to || r.ts.slice(0, 10) <= f.to)
+  ).sort((a, b) => b.t - a.t);
+}
+function journal() {
+  const rows = filtered(), f = state.f;
+  const venues = [...new Set(state.rows.map(r => r.venue))], syms = [...new Set(state.rows.map(r => r.symbol))].sort();
+  const chip = (k, l, ic) => `<button type="button" class="chip" data-outcome="${k}" aria-pressed="${f.outcome === k}">${ic ? icon(ic, 12) : ''}${esc(l)}</button>`;
+  const opts = (arr, cur) => `<option value="all">All</option>` + arr.map(v => `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${esc(v)}</option>`).join('');
+  const sel = state.rows.find(r => r.id === state.sel);
+  const body = rows.map(r => `<tr data-id="${r.id}" class="k-${OUT[r.outcome].kind}${r.id === state.sel ? ' sel' : ''}">
+      <td class="gm"></td>
+      <td><button type="button" class="rowbtn" data-id="${r.id}" aria-label="Open attempt ${r.id}, ${esc(r.symbol)}, ${esc(OUT[r.outcome].label)}"><span class="hide-sm">${md(r.t)} </span>${hms(r.t)}</button></td>
+      <td class="hide-sm nd">${esc(r.venue)}</td>
+      <td><b>${esc(r.symbol)}</b><span class="side-t">${esc(r.side.toUpperCase())}</span></td>
+      <td class="r hide-sm">${qtyFmt(r.qty)}</td>
+      <td class="r hide-md">${usd(r.notional)}</td>
+      <td>${badge(r.outcome)}</td>
+      <td>${spine(r)}</td>
+      <td class="r hide-md">${r.p.toFixed(2)}</td>
+      <td class="r hide-sm">${r.fill ? pxFmt(r.fill) : '<span class="nd">—</span>'}</td>
+      <td class="r hide-sm">${r.outcome === 'filled' ? pnlHtml(r.pnl) : '<span class="nd">no trade</span>'}</td>
+    </tr>`).join('');
+  const table = !state.rows.length
+    ? `<div class="empty" style="margin:20px">${icon('hourglass', 24)}<div><strong>Waiting for the first attempt</strong>The journal is empty. Every attempt — filled or blocked — will appear here with its four-stage chain.</div></div>`
+    : !rows.length
+    ? `<div class="empty" style="margin:20px">${icon('minus', 24)}<div><strong>No attempts match these filters</strong>Clear a filter to see the ${state.rows.length} recorded attempts.</div></div>`
+    : `<div class="scroll"><table class="tbl"><thead><tr><th class="gm" style="padding:0"></th><th>Time (UTC)</th><th class="hide-sm">Venue</th><th>Symbol</th><th class="r hide-sm">Qty</th><th class="r hide-md">Notional</th><th>Outcome</th><th title="intent · judge · gate · venue">Stages</th><th class="r hide-md">Judge p</th><th class="r hide-sm">Fill px</th><th class="r hide-sm">Realized P&amp;L</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="card"><div class="filters">
+      <div><div class="lbl" style="margin-bottom:8px" id="lbl-out">Outcome</div><div class="chips" role="group" aria-labelledby="lbl-out">
+        ${chip('all', 'All')}${chip('filled', 'Filled', 'check')}${chip('blocked', 'All blocked', 'slash')}${chip('cap', 'Cap')}${chip('kill', 'Kill')}${chip('judge', 'Judge')}${chip('venue', 'Venue rejected', 'bang')}</div></div>
+      <label><span class="lbl">Venue</span><select data-f="venue">${opts(venues, f.venue)}</select></label>
+      <label><span class="lbl">Symbol</span><select data-f="symbol">${opts(syms, f.symbol)}</select></label>
+      <label><span class="lbl">From</span><input type="date" data-f="from" value="${esc(f.from)}"></label>
+      <label><span class="lbl">To</span><input type="date" data-f="to" value="${esc(f.to)}"></label>
+      <button type="button" class="btn sm" data-reset>Clear filters</button>
+      <span class="tx2" style="margin-left:auto">Showing <b>${rows.length}</b> of <b>${state.rows.length}</b> · sample data</span>
+    </div></div>
+    <div class="jwrap ${sel ? 'open' : ''}">
+      <div class="card" style="padding:0">${table}</div>
+      ${sel ? detail(sel) : ''}
+    </div>`;
+}
+// 4-stage attempt chain: Intent -> Judge+gate -> Dispatch -> Result, stops at the gate that halted it (T4).
+function detail(r) {
+  const t0 = r.t, o = r.outcome, k = OUT[o].kind, blocked = k === 'blk', failed = k === 'bad';
+  const stop = stageOf(r);
+  const chk = (ok, label, val) => {
+    const mark = ok === true ? `<span class="pos">${icon('check', 14)}</span>` : ok === false ? `<span style="color:var(--amb)">${icon('slash', 14)}</span>` : `<span class="nd">${icon('minus', 14)}</span>`;
+    return `<li>${mark}<span>${esc(label)}</span><span class="tx2" style="margin-left:auto">${esc(String(val))}</span></li>`;
+  };
+  const jl = 'Judge p ≥ ' + LIMITS.judgeMin.toFixed(2), pv = 'p=' + r.p.toFixed(2);
+  let jc, cc, kc;
+  if (o === 'judge') { jc = chk(false, jl, pv); cc = chk(null, 'Cap gate', 'not evaluated'); kc = chk(null, 'Kill switch', 'not evaluated'); }
+  else if (o === 'cap') { jc = chk(true, jl, pv); cc = chk(false, 'Per-order cap ' + usd(LIMITS.perOrder), usd(r.notional)); kc = chk(null, 'Kill switch', 'not evaluated'); }
+  else if (o === 'kill') { jc = chk(true, jl, pv); cc = chk(true, 'Cap gate', usd(r.notional)); kc = chk(false, 'Kill switch released', 'engaged'); }
+  else { jc = chk(true, jl, pv); cc = chk(true, 'Cap gate', usd(r.notional)); kc = chk(true, 'Kill switch released', 'released'); }
+  const st = (name, ts, cls, ic, inner) => `<li class="stage ${cls}"><span class="dot">${icon(ic, 14)}</span><div><h3>${esc(name)}<span class="t">${esc(ts)}</span></h3>${inner}</div></li>`;
+  const kv = arr => `<dl class="kv">${arr.map(a => `<dt>${esc(a[0])}</dt><dd>${a[1]}</dd>`).join('')}</dl>`;
+  const note = blocked
+    ? `<div class="note blk"><span style="color:var(--amb)">${icon('slash', 16)}</span><div><b>Blocked on purpose — no order was sent.</b><br>A safety gate did its job. This is not a failed trade and has no P&amp;L.</div></div>`
+    : failed ? `<div class="note bad"><span style="color:var(--red)">${icon('bang', 16)}</span><div><b>Fault — sent, then refused by the venue.</b><br>The order was dispatched but never filled. No position was opened.</div></div>`
+    : `<div class="note ok"><span class="pos">${icon('check', 16)}</span><div><b>Filled.</b><br>All four stages completed.</div></div>`;
+  const s1 = st('1 · Intent', hms(t0), 'done', 'check', kv([['Venue', esc(r.venue)], ['Side · symbol', esc(r.side.toUpperCase() + ' ' + r.symbol)], ['Quantity', qtyFmt(r.qty)], ['Notional', usd(r.notional)], ['Arming flag at time', r.armed ? 'armed' : 'disarmed']]));
+  const gateStop = stop === 'gate' || stop === 'judge';
+  const s2 = st('2 · Judge + gate', hms(t0 + 400), gateStop ? 'stop-blk' : 'done', gateStop ? 'slash' : 'check',
+    `<ul class="checks">${jc}${cc}${kc}</ul>` +
+    kv([['Rolling-24h cap before', usd(r.capBefore) + ' / ' + usd(LIMITS.daily)], ['Rolling-24h cap after', usd(r.capAfter) + ' / ' + usd(LIMITS.daily)]]) +
+    (gateStop ? `<div class="reason blk"><b>Stopped here.</b> ${esc(reasonText(r))}.</div>` : ''));
+  const s3 = blocked ? st('3 · Dispatch', 'not reached', 'nr', 'minus', '<p class="nd" style="margin:4px 0 0">No dispatch id — the attempt never left the gate.</p>')
+    : st('3 · Dispatch', hms(t0 + 900), 'done', 'check', kv([['Dispatch id', esc(r.dispatchId)]]));
+  const s4 = blocked ? st('4 · Result', 'not reached', 'nr', 'minus', '<p class="nd" style="margin:4px 0 0">Nothing to settle.</p>')
+    : failed ? st('4 · Result', hms(t0 + 1500), 'stop-bad', 'bang', `<div class="reason bad"><b>Stopped here.</b> ${esc(reasonText(r))}.</div>`)
+    : st('4 · Result', hms(t0 + 1600), 'done', 'check', kv([['Fill price', pxFmt(r.fill)], ['Fees', usd(r.fees)], ['Realized P&L', pnlHtml(r.pnl)]]));
+  return `<aside class="card detail" aria-label="Attempt detail" id="detail" tabindex="-1">
+    <div class="hd"><div><div class="lbl">Attempt #${pad4(r.id)}</div><div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">${badge(o)}${spine(r)}</div></div>
+      <button type="button" class="btn sm" data-close aria-label="Close detail panel">${icon('x', 12)} Close</button></div>
+    ${note}<ol class="chain">${s1}${s2}${s3}${s4}</ol></aside>`;
+}
+
 /* ---------- CALIBRATION (T5 — not yet implemented in this commit) ---------- */
 function calibration() { return `<div class=\"empty\">${icon('hourglass', 24)}<div><strong>Calibration not yet implemented</strong>Lands in a follow-up commit (T5).</div></div>`; }
 
