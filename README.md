@@ -3,7 +3,7 @@
 <img src="docs/assets/banner.svg" alt="Tickerlight — every trade explained, every AI decision scored" width="100%">
 
 <p align="center">
-  <img src="https://img.shields.io/badge/License-Apache%202.0-d22128?logo=apache&logoColor=white&label=License" alt="License: Apache 2.0">
+  <img src="https://img.shields.io/github/license/jomakori/Tickerlight?logo=apache&logoColor=white&label=License" alt="License">
   <img src="https://img.shields.io/github/last-commit/jomakori/Tickerlight?logo=git&logoColor=white&label=Last%20commit" alt="Last commit">
   <img src="https://img.shields.io/github/stars/jomakori/Tickerlight?logo=github&logoColor=white&label=Stars" alt="Stars">
   <img src="https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white&label=Go" alt="Go 1.27">
@@ -113,4 +113,4 @@ ledger so the numbers are reproducible before any live wiring exists.
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE). Copyright 2026 jomakori.
+Apache License 2.0 — see [LICENSE](LICENSE). Copyright 2026 Joel Makori (jomakori).
