@@ -3,11 +3,13 @@
 <img src="docs/assets/banner.svg" alt="Tickerlight — every trade explained, every AI decision scored" width="100%">
 
 <p align="center">
+  <img src="https://img.shields.io/badge/License-Apache%202.0-d22128?logo=apache&logoColor=white&label=License" alt="License: Apache 2.0">
+  <img src="https://img.shields.io/github/last-commit/jomakori/Tickerlight?logo=git&logoColor=white&label=Last%20commit" alt="Last commit">
+  <img src="https://img.shields.io/github/stars/jomakori/Tickerlight?logo=github&logoColor=white&label=Stars" alt="Stars">
   <img src="https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white&label=Go" alt="Go 1.27">
   <img src="https://img.shields.io/badge/templ-HTML%20components-ffd400" alt="templ">
   <img src="https://img.shields.io/badge/HTMX-2.0.4-3d72d7" alt="HTMX 2.0.4">
   <img src="https://img.shields.io/badge/deploy-single%20binary-2ea44f" alt="Single binary">
-  <img src="https://img.shields.io/badge/mode-read--only%20sample%20ledger-f0a500" alt="Read-only sample ledger">
 </p>
 
 </div>
@@ -111,4 +113,4 @@ ledger so the numbers are reproducible before any live wiring exists.
 
 ## License
 
-No license file is included yet; licensing will be declared before publication.
+Apache License 2.0 — see [LICENSE](LICENSE). Copyright 2026 jomakori.
