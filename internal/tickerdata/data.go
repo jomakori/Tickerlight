@@ -87,7 +87,7 @@ type Limits struct {
 	CooldownS int
 }
 
-// DefaultLimits mirrors the sample policy the static mock shipped with.
+// DefaultLimits mirrors the sample policy the sample policy used by the original dashboard design.
 func DefaultLimits() Limits {
 	return Limits{PerOrder: 500, Daily: 3500, Drawdown: 100, JudgeMin: 0.60, MinN: 20, CooldownS: 720}
 }

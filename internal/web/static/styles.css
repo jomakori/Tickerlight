@@ -93,7 +93,7 @@ button:disabled{cursor:not-allowed;opacity:.5}
 .empty{display:flex;align-items:center;gap:12px;padding:24px;color:var(--tx2);border:1px dashed var(--line2);border-radius:var(--ri);background:var(--s2)}
 .empty strong{display:block;color:var(--tx)}
 
-/* ---------- outcome tiles (T2) ---------- */
+/* ---------- outcome tiles ---------- */
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
 .tile{display:grid;gap:12px;align-content:space-between;min-height:168px;padding:16px;border-radius:var(--rc);border:1.5px solid var(--line);background:var(--s2);text-align:left;color:var(--tx);transition:transform var(--t),border-color var(--t)}
 .tile:hover{border-color:var(--line2)}
@@ -124,7 +124,7 @@ button:disabled{cursor:not-allowed;opacity:.5}
 .btn.dng{color:var(--red);border-color:var(--red);background:var(--red-bg)}
 .btn.sm{min-height:32px;padding:0 12px}
 
-/* ---------- journal (T3/T4) ---------- */
+/* ---------- journal ---------- */
 .filters{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end}
 .filters label{display:grid;gap:4px}
 .filters select,.filters input{background:var(--s2);border:1px solid var(--line2);border-radius:var(--ri);padding:0 12px;min-height:36px;color-scheme:dark}
@@ -155,7 +155,7 @@ button:disabled{cursor:not-allowed;opacity:.5}
 .sg.xb{border:1px dashed var(--amb);background:var(--amb-bg)}
 .sg.xr{background:var(--red);border-color:var(--red)}
 
-/* ---------- attempt detail (T4) ---------- */
+/* ---------- attempt detail ---------- */
 .detail{position:sticky;top:12px}
 .detail .hd{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:12px}
 .note{padding:12px;border-radius:var(--ri);margin-bottom:20px;display:flex;gap:12px;align-items:flex-start}
@@ -181,14 +181,14 @@ button:disabled{cursor:not-allowed;opacity:.5}
 .checks{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
 .checks li{display:flex;gap:8px;align-items:center}
 
-/* ---------- calibration (T5) ---------- */
+/* ---------- calibration ---------- */
 .calgrid{display:grid;grid-template-columns:minmax(0,600px) minmax(0,1fr);gap:16px;align-items:start;margin-top:16px}
 .nbar{width:96px;height:8px;background:#ffffff14;border-radius:4px;position:relative}
 .nbar>i{display:block;height:100%;background:repeating-linear-gradient(135deg,var(--lbl) 0 3px,transparent 3px 6px);border-radius:4px}
 .nbar.ok>i{background:var(--lime)}
 .cal td,.cal th{height:44px}
 
-/* ---------- risk state (T6/T7) ---------- */
+/* ---------- risk state ---------- */
 .gate-row{display:grid;gap:8px;padding:16px 0;border-top:1px solid var(--line)}
 .gate-row:first-of-type{border-top:0;padding-top:0}
 .gated-note{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:var(--ri);background:var(--amb-bg);border:1px dashed var(--amb);color:var(--tx2);margin:0 0 12px}

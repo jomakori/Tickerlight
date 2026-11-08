@@ -87,7 +87,7 @@ func (v View) RollingUsed() float64 {
 // ---------- formatting helpers ----------
 
 // USD renders an unsigned-ish money value: "−$12.40" for negatives, "$12.40"
-// otherwise (U+2212 minus, matching the mock's typography).
+// otherwise (U+2212 minus, matching the dashboard's typography).
 func USD(n float64) string {
 	if n < 0 {
 		return "−$" + money(-n)

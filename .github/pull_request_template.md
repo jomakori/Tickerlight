@@ -1,30 +1,19 @@
-## 📚 Description
+## Description
 
-<!-- What changed, and why. Two or three sentences beat a changelog dump. -->
+<!-- Summarize what changed and why. -->
 
-<!-- Call out anything that changes the wire format, routes, or the
-     paper-only / T7 safety posture. -->
+## Visuals
 
-### Related ticket/PRs
+<!-- For UI changes, attach desktop (1280px) and mobile (390px) screenshots. -->
 
-<!-- Plane ticket, or the PR this depends on / unblocks. -->
+## Type of change
 
-## 🖼️ Visuals
+- [ ] Feature
+- [ ] Fix
+- [ ] Refactor
+- [ ] Chore
 
-<!-- Required for UI changes: before/after screenshots at desktop (1280px)
-     and mobile (390px). Drag the images in, or link docs/screenshots/.
-     Say "none" for non-UI changes. -->
-
-## 🔍 Types of Changes
-
-- [ ] Feature (new panel, route, or view state)
-- [ ] Fix (rendering, data derivation, escaping)
-- [ ] Refactor (no behaviour change)
-- [ ] Chore (tooling, docs, pre-commit, CI)
-
-## 🧪 Testing
-
-<!-- What you ran, and what it printed. Not "tested locally". -->
+## Testing
 
 ```sh
 templ generate
@@ -32,14 +21,14 @@ go build ./...
 go test ./...
 ```
 
-## ✅ Checklist
+## Checklist
 
-- [ ] `templ generate` output committed in the same change as the `.templ` edit
-- [ ] Paper-only scope intact: sample fixture data only, no live venue calls
-- [ ] T7 (arm/kill) still gated and inert — no handler, no state mutation, no persistence
-- [ ] No secrets, tokens, or account IDs in the diff
-- [ ] Docs updated (`README.md`, `docs/dev/lsp-setup.md`) when setup or routes change
+- [ ] Generated templ files updated with source templates.
+- [ ] Sample-data-only and paper-only behavior remains clear.
+- [ ] Arm/kill controls remain disabled and inert unless explicitly approved otherwise.
+- [ ] No credentials, tokens, or account identifiers included.
+- [ ] User-facing docs updated when needed.
 
-## ⚠️ Caveats / Follow-ups
+## Caveats
 
-<!-- Known gaps, deferred work, or risk the reviewer should weigh. "None" otherwise. -->
+<!-- Note relevant limitations or follow-ups. -->
