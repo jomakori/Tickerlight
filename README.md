@@ -1,32 +1,34 @@
 <div align="center">
 
-# Tickerlight
+<img src="docs/assets/banner.svg" alt="Tickerlight — every trade explained, every AI decision scored" width="100%">
 
-**Your trade made a decision. Can you prove it was the right one?**
-
-Trade review, AI decision auditing, and risk visibility in one fast, self-hosted console.
-
-`Go` · `templ` · `HTMX` · `one binary, no build step`
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white&label=Go" alt="Go 1.27">
+  <img src="https://img.shields.io/badge/templ-HTML%20components-ffd400" alt="templ">
+  <img src="https://img.shields.io/badge/HTMX-2.0.4-3d72d7" alt="HTMX 2.0.4">
+  <img src="https://img.shields.io/badge/deploy-single%20binary-2ea44f" alt="Single binary">
+  <img src="https://img.shields.io/badge/mode-read--only%20sample%20ledger-f0a500" alt="Read-only sample ledger">
+</p>
 
 </div>
 
+## Quick Links
+- [Demo](#demo) · [What is it?](#what-is-it) · [Features](#features) · [Quickstart](#quickstart) · [Status](#current-status) · [Documentation](#documentation)
+
+## Demo
+
 ![Tickerlight overview — P&L, caps, and gate outcomes](docs/screenshots/overview-1280.png)
 
----
+## What is it?
 
-## Most trading dashboards show you what happened. None of them show you why.
+Tickerlight is a self-hosted console for reviewing what your trading system did, and why. It puts
+trade outcomes, the decision chain behind each attempt, AI judge calibration, and live risk
+headroom in one place — served as plain HTML from a single Go binary.
 
-You got filled. You got blocked. You got rejected by the venue. The P&L line moves and you're
-left reverse-engineering the reason from logs scattered across three systems.
+Most dashboards show you what happened. Tickerlight shows you why — and whether the AI that made
+the call was actually right.
 
-And if an AI model is in the loop, the harder question has no answer at all: **was its confidence
-actually worth anything?**
-
-Tickerlight is built around that question. Every attempt is one row with one traceable answer —
-intent, AI judge, risk gate, venue — and every AI decision is scored against what actually
-happened afterwards.
-
-## What you get
+## Features
 
 **Trade performance, without the spreadsheets.**
 Realized P&L, fills, win rate, max drawdown, and fees across any window you care about — all
