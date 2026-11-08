@@ -12,8 +12,21 @@
 
 </div>
 
-## Quick Links
-- [Demo](#demo) · [What is it?](#what-is-it) · [Features](#features) · [Quickstart](#quickstart) · [Status](#current-status) · [Documentation](#documentation)
+## Table of Contents
+
+- [Demo](#demo)
+- [What is it?](#what-is-it)
+- [Features](#features)
+  - [Trade performance](#trade-performance)
+  - [Decision trace](#decision-trace)
+  - [AI calibration](#ai-calibration)
+  - [Risk visibility](#risk-visibility)
+  - [Deployment](#deployment)
+  - [Mobile review](#mobile-review)
+- [Quickstart](#quickstart)
+- [Current status](#current-status)
+- [Documentation](#documentation)
+- [License](#license)
 
 ## Demo
 
@@ -30,32 +43,38 @@ the call was actually right.
 
 ## Features
 
-**Trade performance, without the spreadsheets.**
+### Trade performance
+
 Realized P&L, fills, win rate, max drawdown, and fees across any window you care about — all
 rendered from the same ledger that feeds the journal, so the numbers can't drift apart.
 
-**Every trade traced end to end.**
+### Decision trace
+
 Pick an attempt and walk the chain: what was intended, what the judge scored it, which gate
 stopped it, what the venue said. Blocks stop looking like outages and start looking like the
 system working.
 
-**AI decisions held to account.**
+![Attempt journal with per-attempt decision chain](docs/screenshots/journal-detail-1280.png)
+
+### AI calibration
+
 A calibration view plots the judge's stated probability against realized win rate, bucket by
 bucket. Minimum-sample floors mean thin buckets can't quietly promote a model that only looks
 confident. This is the part you can't get from a P&L chart.
 
-**Risk state, not risk vibes.**
+### Risk visibility
+
 Rolling 24h exposure against daily and per-order caps, drawdown versus limit, cooldown, and every
 pre-trade check visible with the value it compared.
 
-![Attempt journal with per-attempt decision chain](docs/screenshots/journal-detail-1280.png)
+### Deployment
 
-**Fast because it's boring.**
 Go `net/http` and server-rendered templ, with HTMX swapping panels in place. No SPA, no client
 router, no `node_modules`, no CDN dependency at runtime. One static binary that starts instantly
 and serves HTML.
 
-**Review from wherever you are.**
+### Mobile review
+
 The same console, reflowed for a phone — because the moment you want to check exposure is rarely
 the moment you're at your desk.
 
