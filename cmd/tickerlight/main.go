@@ -1,0 +1,52 @@
+// Command tickerlight serves the read-only ops console over a local sample
+// ledger. It has no exchange client and no order path.
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/jomakori/tickerlight/internal/server"
+	"github.com/jomakori/tickerlight/internal/tickerdata"
+)
+
+func main() {
+	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
+	flag.Parse()
+
+	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	rows := tickerdata.Sample()
+
+	handler := server.New(server.Options{Rows: rows, Log: log})
+	srv := &http.Server{
+		Addr:              *addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		<-ctx.Done()
+		drain, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(drain)
+	}()
+
+	log.Info("tickerlight console", "addr", *addr, "rows", len(rows), "mode", "sample-paper-only")
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Error("listen", "err", err)
+		os.Exit(1)
+	}
+}
