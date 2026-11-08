@@ -1,0 +1,163 @@
+package ui
+
+import (
+	"github.com/jomakori/tickerlight/internal/tickerdata"
+)
+
+// Layout renders the full document: shell, session panel, status chips, the
+// always-visible paper-only banner and the active panel.
+templ Layout(v View) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>Tickerlight · ops console (sample data, paper only)</title>
+			<link rel="stylesheet" href="/static/styles.css"/>
+			<script src="/static/htmx.min.js" defer></script>
+			<script src="/static/app.js" defer></script>
+		</head>
+		<body>
+			<div class="shell">
+				<aside class="side">
+					<div class="brand" aria-hidden="true">Tickerlight <span>ops</span></div>
+					@nav(v)
+					<div class="sess" aria-label="Session">
+						<span class="lbl">Session</span>
+						<div>@armWord(14, v)</div>
+						<div class="tx2">Paper account<br/>Sample data · no real funds</div>
+					</div>
+				</aside>
+				<div class="main">
+					<header class="top">
+						@chips(v)
+						<span class="disc" role="note">Sample data · paper only</span>
+					</header>
+					@ViewShell(v)
+				</div>
+			</div>
+		</body>
+	</html>
+}
+
+// ViewShell is the HTMX swap target: the whole <main> element is replaced on
+// navigation so the URL, the visible panel and the nav state stay in sync.
+templ ViewShell(v View) {
+	<main id="view" data-tab={ v.Tab }>
+		if v.Tab == TabJournal {
+			@Journal(v.Journal())
+		} else if v.Tab == TabCalibration {
+			@Calibration(v.Calibration())
+		} else if v.Tab == TabRisk {
+			@Risk(v.RiskState())
+		} else {
+			@Overview(v.Overview())
+		}
+	</main>
+}
+
+templ nav(v View) {
+	<nav class="tabs" aria-label="Sections">
+		for _, t := range Tabs {
+			<a
+				class="tablink"
+				href={ templ.URL(tabURL(t.Key)) }
+				hx-get={ tabURL(t.Key) }
+				hx-target="#view"
+				hx-select="#view"
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				aria-current={ currentPage(v.Tab == t.Key) }
+			>
+				<span class="tl">{ t.Label }</span>
+			</a>
+		}
+	</nav>
+}
+
+templ chips(v View) {
+	<div class="chip-k">
+		<span class="lbl">Arming flag</span>
+		<b>@armWord(15, v)</b>
+	</div>
+	<div class="chip-k">
+		<span class="lbl">Kill switch</span>
+		<b>@killStatus(15, v)</b>
+	</div>
+	<div class="chip-k">
+		<span class="lbl">Caps · 24h</span>
+		<b class="nw">
+			{ Pct(v.RollingUsed()/v.Limits.Daily, 0) }
+			<span class="den" style="font-size:13px">of { USD(v.Limits.Daily) }</span>
+		</b>
+	</div>
+}
+
+// armWord is the arming-flag wordmark. The flag is fixture state in this
+// build: nothing in the UI can change it, and the handlers never mutate it.
+templ armWord(size int, v View) {
+	if v.Kill {
+		<span class="gl" style={ wordStyle(size, "#FF5A5F") }>
+			@Icon("bang", size) HALTED
+		</span>
+	} else if v.Armed {
+		<span class="gl" style={ wordStyle(size, "") }>
+			@Icon("dot", size) ARMED
+		</span>
+	} else {
+		<span class="gl tx2" style={ wordStyle(size, "") }>
+			@Icon("ring", size) DISARMED
+		</span>
+	}
+}
+
+templ killStatus(size int, v View) {
+	if v.Kill {
+		<span class="gl" style={ wordStyle(size, "#FF5A5F") }>
+			@Icon("bang", size) ENGAGED
+		</span>
+	} else {
+		<span class="gl" style={ wordStyle(size, "") }>
+			@Icon("check", size) RELEASED
+		</span>
+	}
+}
+
+// Icon renders one glyph from the shared stroke set.
+templ Icon(name string, size int) {
+	<svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style={ iconStyle(size) }>
+		@templ.Raw(icons[name])
+	</svg>
+}
+
+// Badge is the per-outcome pill.
+templ Badge(o tickerdata.Outcome) {
+	<span class={ "bd", string(o.Meta().Kind) }>
+		@Icon(o.Meta().Icon, 12)
+		{ o.Meta().Label }
+	</span>
+}
+
+// Spine is the four-segment stage strip shown in journal rows and detail.
+templ Spine(o tickerdata.Outcome) {
+	<span class="spine" role="img" aria-label={ joinStates(StageStates(o), ", ") } title={ joinStates(StageStates(o), " · ") }>
+		for i := range StageStates(o) {
+			if o.Meta().Stop < 0 || i < o.Meta().Stop {
+				<i class="sg pf"></i>
+			} else if i == o.Meta().Stop && o.Meta().Kind == tickerdata.KindBad {
+				<i class="sg xr"></i>
+			} else if i == o.Meta().Stop {
+				<i class="sg xb"></i>
+			} else {
+				<i class="sg"></i>
+			}
+		}
+	</span>
+}
+
+// TicksMeter is the segmented utilisation meter with an ARIA meter wrapper.
+templ TicksMeter(p float64, n int, label, max, now string) {
+	<div role="meter" aria-label={ label } aria-valuemin="0" aria-valuemax={ max } aria-valuenow={ now }>
+		@templ.Raw(Ticks(p, n))
+	</div>
+}

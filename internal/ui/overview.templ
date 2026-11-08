@@ -1,0 +1,199 @@
+package ui
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/jomakori/tickerlight/internal/tickerdata"
+)
+
+// Overview is the cockpit: realized P&L, caps, kill switch, outcome tiles and
+// the recent gate events.
+templ Overview(d OverviewData) {
+	<section class="grid" aria-label="Overview">
+		<div class="card glow c8">
+			<div class="row">
+				<h2>
+					Realized P&amp;L <span class="nd">· { strconv.Itoa(len(d.Rows)) } attempts · { d.Range.Label() }</span>
+				</h2>
+				<div class="seg" role="group" aria-label="Time range">
+					for _, opt := range rangeOptions() {
+						<a
+							class="segbtn"
+							href={ templ.URL(RangeURL(opt.Key)) }
+							hx-get={ RangeURL(opt.Key) }
+							hx-target="#view"
+							hx-select="#view"
+							hx-swap="outerHTML"
+							hx-push-url="true"
+							aria-pressed={ pressed(d.Range == opt.Key) }
+						>{ opt.Label }</a>
+					}
+				</div>
+			</div>
+			<div class="base">
+				<span class="num n56">{ USDSigned(d.Stats.Eq) }</span>
+				<span class={ "delta", templ.KV("neu", d.DayPnL <= 0) }>
+					{ USDSigned(d.DayPnL) }
+					<span class="lbl" style="font-size:10px">24h</span>
+				</span>
+			</div>
+			<div class="chart-box" data-chart>@templ.Raw(EquityChart(d.Rows, d.AllLen))</div>
+			<div class="keys">
+				<span>@Icon("dot", 12) fill</span>
+				<span><i class="sg xb"></i> blocked by a gate</span>
+				<span><i class="sg xr"></i> venue rejected</span>
+				<span class="tx2">column height = notional</span>
+			</div>
+			<div class="mini">
+				<div><span class="lbl">Fills</span><span class="num n20">{ strconv.Itoa(d.Stats.Filled) }</span></div>
+				<div><span class="lbl">Win rate</span><span class="num n20">{ Pct(d.WinRate(), 0) }</span></div>
+				<div><span class="lbl">Max drawdown</span><span class="num n20">{ USD(d.Stats.MaxDD) }</span></div>
+				<div><span class="lbl">Fees</span><span class="num n20">{ USD(d.Stats.Fees) }</span></div>
+			</div>
+		</div>
+
+		<div class="card c4">
+			<h2>Caps · rolling 24h</h2>
+			<div class="gate-row">
+				<div class="row"><span class="tx2">Per-order cap</span><b>{ USD(d.Limits.PerOrder) }</b></div>
+				<div class="row"><span class="tx2">Daily cap</span><b>{ USD(d.Limits.Daily) }</b></div>
+				<div class="row">
+					<span class="tx2">Used</span>
+					<b class="nw">{ USD(d.Used) } <span class="nd">({ Pct(d.Used/d.Limits.Daily, 0) })</span></b>
+				</div>
+				@TicksMeter(d.Used/d.Limits.Daily, 36, "Rolling 24h cap utilisation", "100", Pct(d.Used/d.Limits.Daily, 0))
+				<p class="tx2" style="margin:0">Dispatched notional in the trailing 24h. Blocks are the gate doing its job, not an outage — <b>{ strconv.Itoa(d.Blocked) }</b> attempts were stopped in this range.</p>
+			</div>
+		</div>
+
+		<div class="card c4">
+			<h2>Kill switch</h2>
+			<div class="gate-row">
+				<div class="row"><span class="tx2">Status</span>@killStatus(15, d.View)</div>
+				<div class="row"><span class="tx2">Cooldown</span><b class="mono cdv" data-cd="720">{ CooldownText(d.Limits.CooldownS) }</b></div>
+				<p class="gated-note">@Icon("lock", 14) Arming and kill are gated in this build — the controls below are inert.</p>
+				<div class="row" style="justify-content:flex-start;gap:8px">
+					<button class="btn sm" type="button" disabled aria-disabled="true" title="Gated in v1 — arming is not wired">Disarm</button>
+					<button class="btn sm dng" type="button" disabled aria-disabled="true" title="Gated in v1 — kill is not wired">Kill switch</button>
+					<button class="btn sm" type="button" disabled aria-disabled="true" title="Gated in v1 — re-arm is not wired">Re-arm</button>
+				</div>
+			</div>
+		</div>
+
+		<div class="card c8">
+			<h2>Why nothing happened</h2>
+			<div class="tiles">
+				for _, t := range outcomeTiles(d) {
+					<a
+						class={ "tile", t.Kind }
+						href={ templ.URL(t.URL) }
+						hx-get={ t.URL }
+						hx-target="#view"
+						hx-select="#view"
+						hx-swap="outerHTML"
+						hx-push-url="true"
+					>
+						<span class="t-top">@Icon(t.Icon, 12) { t.Label }</span>
+						<span class="num n36">{ strconv.Itoa(t.Count) }</span>
+						<span class="share"><i style={ shareStyle(t.Share) }></i></span>
+						<span class="tx2">{ Pct(t.Share, 0) } of attempts</span>
+					</a>
+				}
+			</div>
+			<div class="checks tx2" style="margin-top:12px">
+				<div>Every block is explained in plain words on its attempt — open one in the journal.</div>
+			</div>
+		</div>
+
+		<div class="card c12">
+			<div class="row">
+				<h2>Recent gate events</h2>
+				<a class="btn sm" href="/journal" hx-get="/journal" hx-target="#view" hx-select="#view" hx-swap="outerHTML" hx-push-url="true">Open journal</a>
+			</div>
+			<div class="events">
+				for _, r := range d.Recent(6) {
+					<a
+						class={ "ev", templ.KV("bad", r.Outcome.Meta().Kind == tickerdata.KindBad) }
+						href={ templ.URL(JournalURL(tickerdata.Filter{}, r.ID)) }
+						hx-get={ JournalURL(tickerdata.Filter{}, r.ID) }
+						hx-target="#view"
+						hx-select="#view"
+						hx-swap="outerHTML"
+						hx-push-url="true"
+					>
+						<span class="ts">{ MD(r.TS) } { HMS(r.TS) }</span>
+						<span class="why">{ ReasonText(r) }</span>
+						<span class="gl">@Badge(r.Outcome)</span>
+					</a>
+				}
+			</div>
+		</div>
+	</section>
+}
+
+// RangeOption is one Overview range pill.
+type RangeOption struct {
+	Key    tickerdata.Range
+	Label  string
+	URL    string
+	Active bool
+}
+
+func rangeOptions() []RangeOption {
+	opts := []RangeOption{
+		{Key: tickerdata.RangeAll, Label: "All"},
+		{Key: tickerdata.Range24h, Label: "24h"},
+		{Key: tickerdata.RangeToday, Label: "Today"},
+	}
+	for i := range opts {
+		opts[i].URL = RangeURL(opts[i].Key)
+	}
+	return opts
+}
+
+// OutcomeTile is one "why nothing happened" tile.
+type OutcomeTile struct {
+	Label string
+	Icon  string
+	Kind  string
+	Count int
+	Share float64
+	URL   string
+}
+
+func outcomeTiles(d OverviewData) []OutcomeTile {
+	tiles := []OutcomeTile{
+		{Label: "Filled", Icon: "check", Kind: "ok", Count: d.Stats.Counts[tickerdata.Filled], URL: JournalURL(tickerdata.Filter{Outcome: "filled"}, 0)},
+		{Label: "Blocked · cap", Icon: "slash", Kind: "blk", Count: d.Stats.Counts[tickerdata.Cap], URL: JournalURL(tickerdata.Filter{Outcome: "cap"}, 0)},
+		{Label: "Blocked · judge", Icon: "slash", Kind: "blk", Count: d.Stats.Counts[tickerdata.Judge], URL: JournalURL(tickerdata.Filter{Outcome: "judge"}, 0)},
+		{Label: "Venue rejected", Icon: "bang", Kind: "bad", Count: d.Stats.Counts[tickerdata.Venue], URL: JournalURL(tickerdata.Filter{Outcome: "venue"}, 0)},
+	}
+	if d.Stats.Total == 0 {
+		for i := range tiles {
+			tiles[i].Kind += " zero"
+		}
+		return tiles
+	}
+	for i := range tiles {
+		tiles[i].Share = float64(tiles[i].Count) / float64(d.Stats.Total)
+		if tiles[i].Count == 0 {
+			tiles[i].Kind += " zero"
+		}
+	}
+	return tiles
+}
+
+func shareStyle(share float64) string {
+	if share < 0.01 && share > 0 {
+		share = 0.01
+	}
+	return fmt.Sprintf("width:%.1f%%", share*100)
+}
+
+func pressed(on bool) string {
+	if on {
+		return "true"
+	}
+	return "false"
+}

@@ -1,0 +1,220 @@
+package ui
+
+import (
+	"strconv"
+
+	"github.com/jomakori/tickerlight/internal/tickerdata"
+)
+
+// Journal is the filterable attempt tape plus the attempt detail panel.
+templ Journal(d JournalData) {
+	<section aria-label="Journal">
+		<div class="card">
+			<div class="row">
+				<h2>Attempt journal</h2>
+				<span class="tx2">{ strconv.Itoa(len(d.Rows)) } of { strconv.Itoa(d.Total) } attempts</span>
+			</div>
+			<form
+				class="filters"
+				method="get"
+				action="/journal"
+				hx-get="/journal"
+				hx-target="#view"
+				hx-select="#view"
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				hx-trigger="change, submit"
+			>
+				<label>
+					<span class="lbl">Outcome</span>
+					<select name="outcome">
+						for _, o := range outcomeOptions() {
+							<option value={ o.Value } selected?={ sel(d.Filter.Outcome, o.Value) }>{ o.Label }</option>
+						}
+					</select>
+				</label>
+				<label>
+					<span class="lbl">Venue</span>
+					<select name="venue">
+						<option value="all" selected?={ sel(d.Filter.Venue, "all") }>All venues</option>
+						for _, vn := range d.Venues {
+							<option value={ vn } selected?={ sel(d.Filter.Venue, vn) }>{ tickerdata.VenueName(vn) }</option>
+						}
+					</select>
+				</label>
+				<label>
+					<span class="lbl">Symbol</span>
+					<select name="symbol">
+						<option value="all" selected?={ sel(d.Filter.Symbol, "all") }>All symbols</option>
+						for _, s := range d.Symbols {
+							<option value={ s } selected?={ sel(d.Filter.Symbol, s) }>{ s }</option>
+						}
+					</select>
+				</label>
+				<label>
+					<span class="lbl">From</span>
+					<input type="date" name="from" value={ d.Filter.From }/>
+				</label>
+				<label>
+					<span class="lbl">To</span>
+					<input type="date" name="to" value={ d.Filter.To }/>
+				</label>
+				<noscript><button class="btn sm" type="submit">Apply filters</button></noscript>
+			</form>
+			<div class="chips" style="margin-top:12px">
+				for _, c := range chipOptions() {
+					<a
+						class="chip"
+						href={ templ.URL(JournalURL(FilterCopy(d.Filter, c.Value), 0)) }
+						hx-get={ JournalURL(FilterCopy(d.Filter, c.Value), 0) }
+						hx-target="#view"
+						hx-select="#view"
+						hx-swap="outerHTML"
+						hx-push-url="true"
+						aria-pressed={ pressed(chipOn(d.Filter.Outcome, c.Value)) }
+					>{ c.Label }</a>
+				}
+			</div>
+			<div class="jwrap">
+				<div class="scroll">
+					<table class="tbl">
+						<thead>
+							<tr>
+								<th>Time</th>
+								<th>Attempt</th>
+								<th>Venue</th>
+								<th>Symbol</th>
+								<th>Side</th>
+								<th class="r">Qty</th>
+								<th class="r">Px</th>
+								<th class="r">Notional</th>
+								<th>Stage</th>
+								<th>Outcome</th>
+							</tr>
+						</thead>
+						<tbody>
+							if len(d.Rows) == 0 {
+								<tr>
+									<td colspan="11">
+										<div class="empty">
+											@Icon("hourglass", 24)
+											<div><strong>No attempts match these filters</strong>Widen the range or clear the outcome chip — the ledger still has { strconv.Itoa(d.Total) } attempts.</div>
+										<a class="btn sm" href="/journal">Clear filters</a>
+										</div>
+									</td>
+								</tr>
+							}
+							for _, r := range d.Rows {
+								<tr
+									class={ "k-" + string(r.Outcome.Meta().Kind), templ.KV("sel", d.Selected != nil && d.Selected.ID == r.ID) }
+									hx-get={ JournalURL(d.Filter, r.ID) }
+									hx-target="#detail-pane"
+									hx-select="#detail-pane"
+									hx-swap="outerHTML"
+								>
+									<td class="gm"></td>
+									<td>
+										<button class="rowbtn" type="button" aria-label={ "Open attempt " + Pad4(r.ID) + ", " + ReasonText(r) }>
+											{ MD(r.TS) } { HMS(r.TS) }
+										</button>
+									</td>
+									<td class="mono">#{ Pad4(r.ID) }</td>
+									<td>{ tickerdata.VenueName(r.Venue) }</td>
+									<td class="mono">{ r.Symbol }</td>
+									<td class="tx2">{ r.Side }</td>
+									<td class="r mono">{ Qty(r.Qty) }</td>
+									<td class="r mono">{ Px(r.Px) }</td>
+									<td class="r mono">{ USD(r.Notional) }</td>
+									<td>@Spine(r.Outcome)</td>
+									<td>@Badge(r.Outcome)</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+				@DetailPane(d)
+			</div>
+		</div>
+	</section>
+}
+
+// DetailPane is the swap target for one attempt. It is always present so the
+// row clicks have somewhere to land; data-open drives the two-column layout
+// via :has() in CSS.
+templ DetailPane(d JournalData) {
+	<aside id="detail-pane" class="card detail" data-open={ boolStr(d.Selected != nil) } aria-label="Attempt detail">
+		if d.Selected != nil {
+			@AttemptDetail(d)
+		}
+	</aside>
+}
+
+// AttemptDetail is the full chain walk for one attempt.
+templ AttemptDetail(d JournalData) {
+	<div class="hd">
+		<div>
+			<div class="lbl">Attempt</div>
+			<div class="base"><span class="num n28">#{ Pad4(d.Selected.ID) }</span>@Badge(d.Selected.Outcome)</div>
+			<div class="tx2 mono">{ MD(d.Selected.TS) } { HMS(d.Selected.TS) } · { tickerdata.VenueName(d.Selected.Venue) }</div>
+		</div>
+		<a
+			class="btn sm"
+			href={ templ.URL(JournalURL(d.Filter, 0)) }
+			hx-get={ JournalURL(d.Filter, 0) }
+			hx-target="#detail-pane"
+			hx-select="#detail-pane"
+			hx-swap="outerHTML"
+			aria-label="Close attempt detail"
+		>Close</a>
+	</div>
+
+	<div class={ "note", string(d.Selected.Outcome.Meta().Kind) }>
+		@Icon(d.Selected.Outcome.Meta().Icon, 18)
+		<div><b>{ d.Selected.Outcome.Meta().Label }</b><div class="tx2">{ ReasonText(*d.Selected) }</div></div>
+	</div>
+
+	<ol class="chain">
+		for i, st := range StagesOf(*d.Selected) {
+			<li class={ "stage", st.Class }>
+				<span class="dot">{ strconv.Itoa(i + 1) }</span>
+				<div>
+					<h3>{ st.Name }<span class="t">{ st.Time }</span></h3>
+					<dl class="kv">
+						for _, kv := range st.KV {
+							<dt>{ kv.Key }</dt>
+							<dd class="mono">{ kv.Value }</dd>
+						}
+					</dl>
+					if st.Reason != "" {
+						<div class={ "reason", st.Class }>{ st.Reason }</div>
+					}
+					if len(st.Checks) > 0 {
+						<ul class="checks">
+							for _, c := range st.Checks {
+								<li>
+									if c.OK {
+										<span class="pos">@Icon("check", 12)</span>
+									} else {
+										<span style="color:var(--amb)">@Icon("slash", 12)</span>
+									}
+									<span class={ templ.KV("tx2", !c.OK) }>{ c.Label }</span>
+									<span class="tx2 mono">{ c.Value }</span>
+								</li>
+							}
+						</ul>
+					}
+				</div>
+			</li>
+		}
+	</ol>
+
+	<dl class="kv" style="border-top:1px solid var(--line);padding-top:12px">
+		<dt>Notional</dt><dd class="mono">{ USD(d.Selected.Notional) }</dd>
+		<dt>Rolling 24h before</dt><dd class="mono">{ USD(d.Selected.CapBefore) }</dd>
+		<dt>Rolling 24h after</dt><dd class="mono">{ USD(d.Selected.CapAfter) }</dd>
+		<dt>Armed at attempt</dt><dd class="mono">{ boolWord(d.Selected.Armed) }</dd>
+		<dt>Dispatch id</dt><dd class="mono">{ dashIfEmpty(d.Selected.DispatchID) }</dd>
+		<dt>Judge p</dt><dd class="mono">{ Pct(d.Selected.P, 0) }</dd>
+		<dt>Fees</dt><dd class="mono">{ USD(d.Selected.Fees) }</dd>
+	</dl>
+}

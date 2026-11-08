@@ -1,0 +1,90 @@
+package ui
+
+import (
+	"strconv"
+
+	"github.com/jomakori/tickerlight/internal/tickerdata"
+)
+
+// Risk shows the current risk state: what the caps are, how much of them is
+// used, which pre-trade checks are running, and the gated kill switch.
+templ Risk(d RiskData) {
+	<section class="grid" aria-label="Risk state">
+		<div class="card c8">
+			<div class="row">
+				<h2>Risk state</h2>
+				<span class="tx2">sample ledger · paper account</span>
+			</div>
+			<div class="gate-row">
+				<span class="lbl">Rolling 24h dispatched</span>
+				<div class="base">
+					<span class="num n40">{ USD(d.Used) }</span>
+					<span class={ "delta", templ.KV("neu", d.DailyPct < 0.8) }>{ Pct(d.DailyPct, 0) } <span class="lbl" style="font-size:10px">of daily cap</span></span>
+				</div>
+				@TicksMeter(d.DailyPct, 48, "Daily cap utilisation", "100", Pct(d.DailyPct, 0))
+				<div class="kv2">
+					<div><span class="lbl">Daily cap</span><b class="mono">{ USD(d.Limits.Daily) }</b></div>
+					<div><span class="lbl">Per-order cap</span><b class="mono">{ USD(d.Limits.PerOrder) }</b></div>
+					<div><span class="lbl">Drawdown limit</span><b class="mono">{ USD(d.Limits.Drawdown) }</b></div>
+					<div><span class="lbl">Judge threshold</span><b class="mono">{ Pct(d.Limits.JudgeMin, 0) }</b></div>
+				</div>
+			</div>
+			<div class="gate-row">
+				<h3>Pre-trade checks</h3>
+				<ul class="checks">
+					for _, c := range riskChecks(d) {
+						<li>
+							if c.OK {
+								<span class="pos">@Icon("check", 12)</span>
+							} else {
+								<span style="color:var(--amb)">@Icon("slash", 12)</span>
+							}
+							<span class={ templ.KV("tx2", !c.OK) }>{ c.Label }</span>
+							<span class="tx2 mono">{ c.Value }</span>
+						</li>
+					}
+				</ul>
+			</div>
+		</div>
+
+		<div class="card c4">
+			<h2>Kill switch</h2>
+			<div class="gate-row">
+				<div class="row"><span class="tx2">Status</span>@killStatus(16, d.View)</div>
+				<div class="row"><span class="tx2">Cooldown</span><b class="mono cdv" data-cd={ strconv.Itoa(d.Limits.CooldownS) }>{ CooldownText(d.Limits.CooldownS) }</b></div>
+				<div class="row"><span class="tx2">Kill events</span><b class="mono">{ strconv.Itoa(d.Kills) }</b></div>
+				<div class="row"><span class="tx2">Gate blocks</span><b class="mono">{ strconv.Itoa(d.Blocks) }</b></div>
+				<div class="row"><span class="tx2">Venue rejects</span><b class="mono">{ strconv.Itoa(d.VenueFail) }</b></div>
+				<div class="row"><span class="tx2">Last fill</span><b class="mono">{ d.LastFill }</b></div>
+			</div>
+			<p class="gated-note">@Icon("lock", 14) Gated in this build: arming, kill and re-arm are inert server-side and disabled in the UI.</p>
+			<div class="row" style="justify-content:flex-start;gap:8px">
+				<button class="btn sm" type="button" disabled?={ !ArmKillEnabled } aria-disabled={ strconv.FormatBool(!ArmKillEnabled) } title="Gated in v1 — arming is not wired">Disarm</button>
+				<button class="btn sm dng" type="button" disabled?={ !ArmKillEnabled } aria-disabled={ strconv.FormatBool(!ArmKillEnabled) } title="Gated in v1 — kill is not wired">Kill switch</button>
+				<button class="btn sm" type="button" disabled?={ !ArmKillEnabled } aria-disabled={ strconv.FormatBool(!ArmKillEnabled) } title="Gated in v1 — re-arm is not wired">Re-arm</button>
+			</div>
+		</div>
+
+		<div class="card c12">
+			<h2>What this console is</h2>
+			<p class="tx2" style="margin:0">
+				A read-only view over a sample ledger. Every number on every page is server-rendered from local fixtures;
+				the browser makes no calls to a trading venue, a broker, or a market-data API. There is no order path in this binary —
+				the handlers only serve HTML and embedded static assets.
+			</p>
+		</div>
+	</section>
+}
+
+func riskChecks(d RiskData) []Check {
+	withinDaily := d.Used <= d.Limits.Daily
+	withinDD := d.Drawdown < d.Limits.Drawdown
+	return []Check{
+		{"rolling 24h within daily cap", USD(d.Used) + " of " + USD(d.Limits.Daily), withinDaily},
+		{"drawdown within limit", USD(d.Drawdown) + " of " + USD(d.Limits.Drawdown), withinDD},
+		{"judge score above threshold", Pct(d.MeanP, 0) + " ≥ " + Pct(d.Limits.JudgeMin, 0), d.MeanP >= d.Limits.JudgeMin},
+		{"calibration sample above floor", strconv.Itoa(d.CalN) + " ≥ " + strconv.Itoa(d.Limits.MinN), d.CalN >= d.Limits.MinN},
+		{"symbol allowlisted", strconv.Itoa(len(tickerdata.Symbols(d.Rows))) + " symbols", true},
+		{"arming flag set", boolWord(d.Armed), d.Armed},
+	}
+}
