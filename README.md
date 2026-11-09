@@ -96,12 +96,23 @@ go run ./cmd/tickerlight
 
 Then open <http://localhost:8080>.
 
+To render a real attempt journal instead of the sample ledger, point the console at the JSONL file
+the trading server writes:
+
+```sh
+go run ./cmd/tickerlight --journal /path/to/journal.jsonl
+```
+
+The file is read-only to this binary and a torn final line (a crash mid-write) is skipped rather
+than failing the read. Without the flag the console serves the sample ledger exactly as before; a
+path that cannot be read is a startup error, never a silent fallback to sample trades.
+
 ## Current status
 
-Tickerlight currently runs on a **local sample ledger**. Trade outcomes and AI judge scores are
-sample data — there is no live broker, market-data feed, or model provider connected, and the
-binary has no order path. The console is read-only; arming and kill-switch controls render
-disabled and are inert server-side.
+Tickerlight currently runs on a **local sample ledger**, or on a journal file written by the
+paper-only trading server (`--journal`); either way the outcomes it shows are paper trades. There is
+no live broker, market-data feed, or model provider connected, and the binary has no order path. The
+console is read-only; arming and kill-switch controls render disabled and are inert server-side.
 
 That's deliberate: the review surfaces are the product, and they're validated against a fixed
 ledger so the numbers are reproducible before any live wiring exists.

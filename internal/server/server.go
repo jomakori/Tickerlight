@@ -22,6 +22,9 @@ type Options struct {
 	Now func() time.Time
 	// Log receives one line per request.
 	Log *slog.Logger
+	// Source names where Rows came from, so the header can say it. Empty
+	// means the built-in sample ledger.
+	Source string
 }
 
 // New returns the console handler. It serves HTML and embedded static assets
@@ -34,7 +37,7 @@ func New(opts Options) http.Handler {
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)
 	}
-	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log}
+	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log, source: opts.Source}
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServer(web.Static()))))
@@ -51,9 +54,10 @@ func New(opts Options) http.Handler {
 }
 
 type server struct {
-	rows []tickerdata.Attempt
-	now  func() time.Time
-	log  *slog.Logger
+	rows   []tickerdata.Attempt
+	now    func() time.Time
+	log    *slog.Logger
+	source string
 }
 
 // page builds one view from the request and renders either the whole document
@@ -64,6 +68,7 @@ func (s *server) page(tab string) http.HandlerFunc {
 		v.Tab = tab
 		v.Range = tickerdata.ParseRange(r.URL.Query().Get("range"))
 		v.Filter = parseFilter(r)
+		v.Source = s.source
 
 		detail := false
 		if tab == ui.TabJournal {

@@ -131,6 +131,35 @@ func TestReasonTextNamesTheActualGate(t *testing.T) {
 	}
 }
 
+// A row read from the real journal carries the server's own reason code and
+// no probability. The console must repeat that code rather than compute a
+// cap sentence from the sample policy, which would name a limit that was
+// never in force.
+func TestReasonTextPrefersTheJournalledReason(t *testing.T) {
+	capRow := ReasonText(tickerdata.Attempt{
+		Outcome:  tickerdata.Cap,
+		Notional: 1200,
+		Detail:   "position_size_cap_exceeded",
+	})
+	if !strings.Contains(capRow, "position_size_cap_exceeded") {
+		t.Fatalf("cap reason = %q, want the journalled reason code", capRow)
+	}
+	if strings.Contains(capRow, "$500") {
+		t.Fatalf("cap reason = %q, want no invented sample limit", capRow)
+	}
+
+	judgeRow := ReasonText(tickerdata.Attempt{
+		Outcome: tickerdata.Judge,
+		Detail:  "judge_below_threshold",
+	})
+	if !strings.Contains(judgeRow, "judge_below_threshold") {
+		t.Fatalf("judge reason = %q, want the journalled reason code", judgeRow)
+	}
+	if strings.Contains(judgeRow, "p=") {
+		t.Fatalf("judge reason = %q, want no fabricated probability", judgeRow)
+	}
+}
+
 func TestStageStatesWalkTheChain(t *testing.T) {
 	for _, c := range []struct {
 		o    tickerdata.Outcome

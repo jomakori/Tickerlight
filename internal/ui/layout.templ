@@ -12,7 +12,7 @@ templ Layout(v View) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<title>Tickerlight · ops console (sample data, paper only)</title>
+			<title>Tickerlight · ops console ({ v.SourceLabel() }, paper only)</title>
 			<link rel="stylesheet" href="/static/styles.css"/>
 			<script src="/static/htmx.min.js" defer></script>
 			<script src="/static/app.js" defer></script>
@@ -25,13 +25,13 @@ templ Layout(v View) {
 					<div class="sess" aria-label="Session">
 						<span class="lbl">Session</span>
 						<div>@armWord(14, v)</div>
-						<div class="tx2">Paper account<br/>Sample data · no real funds</div>
+						<div class="tx2">Paper account<br/>{ v.SourceLine() }</div>
 					</div>
 				</aside>
 				<div class="main">
 					<header class="top">
 						@chips(v)
-						<span class="disc" role="note">Sample data · paper only</span>
+						<span class="disc" role="note">{ v.SourceBadge() }</span>
 					</header>
 					@ViewShell(v)
 				</div>

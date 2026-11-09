@@ -45,6 +45,38 @@ type View struct {
 	// reporting anything but "disarmed" would misdescribe the binary.
 	Armed bool
 	Kill  bool
+	// Source names where the rows came from: empty means the built-in
+	// sample ledger. The header repeats it so a page showing real journal
+	// rows never claims to be sample data.
+	Source string
+}
+
+// SourceLabel is the origin phrase used in the title and session panel.
+func (v View) SourceLabel() string {
+	if v.Source == "" {
+		return "sample data"
+	}
+	return v.Source
+}
+
+// SourceBadge is the corner badge: the origin plus the standing paper-only
+// reminder.
+func (v View) SourceBadge() string {
+	if v.Source == "" {
+		return "Sample data · paper only"
+	}
+	return "Attempt journal · paper only"
+}
+
+// SourceLine is the session-panel sentence: the origin plus the standing
+// reminder that nothing here spends real money.
+func (v View) SourceLine() string {
+	switch v.SourceLabel() {
+	case "sample data":
+		return "Sample data · no real funds"
+	default:
+		return "Attempt journal · no real funds"
+	}
 }
 
 // ArmKillEnabled reports whether the arm/kill controls are wired to anything.
@@ -173,10 +205,19 @@ func Pad4(n int) string { return fmt.Sprintf("%04d", n) }
 
 // ReasonText is the human explanation shown for an attempt, shared by the
 // event list, the chart tooltip and the detail chain.
+//
+// A row that carries its own reason code (one read from the attempt
+// journal) reports that code instead of a sentence computed from the
+// sample policy: the console does not know the live caps, and inventing a
+// figure would tell an operator that a real refusal happened against a
+// limit that was never in force.
 func ReasonText(r tickerdata.Attempt) string {
 	l := tickerdata.DefaultLimits()
 	switch r.Outcome {
 	case tickerdata.Cap:
+		if r.Detail != "" {
+			return "Blocked by cap — " + r.Detail
+		}
 		if r.Notional > l.PerOrder {
 			return fmt.Sprintf("Blocked by cap — %s exceeds the per-order cap of %s", USD(r.Notional), USD(l.PerOrder))
 		}
@@ -184,6 +225,9 @@ func ReasonText(r tickerdata.Attempt) string {
 	case tickerdata.Kill:
 		return "Blocked by kill switch — " + r.Detail
 	case tickerdata.Judge:
+		if r.P == 0 && r.Detail != "" {
+			return "Blocked by judge — " + r.Detail
+		}
 		return fmt.Sprintf("Blocked by judge — p=%.2f is below the %.2f threshold", r.P, l.JudgeMin)
 	case tickerdata.Venue:
 		return fmt.Sprintf("Venue rejected — %s: %s", tickerdata.VenueName(r.Venue), r.Detail)
