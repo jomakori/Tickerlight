@@ -173,10 +173,19 @@ func Pad4(n int) string { return fmt.Sprintf("%04d", n) }
 
 // ReasonText is the human explanation shown for an attempt, shared by the
 // event list, the chart tooltip and the detail chain.
+//
+// A row that carries its own reason code (one read from the attempt
+// journal) reports that code instead of a sentence computed from the
+// sample policy: the console does not know the live caps, and inventing a
+// figure would tell an operator that a real refusal happened against a
+// limit that was never in force.
 func ReasonText(r tickerdata.Attempt) string {
 	l := tickerdata.DefaultLimits()
 	switch r.Outcome {
 	case tickerdata.Cap:
+		if r.Detail != "" {
+			return "Blocked by cap — " + r.Detail
+		}
 		if r.Notional > l.PerOrder {
 			return fmt.Sprintf("Blocked by cap — %s exceeds the per-order cap of %s", USD(r.Notional), USD(l.PerOrder))
 		}
@@ -184,6 +193,9 @@ func ReasonText(r tickerdata.Attempt) string {
 	case tickerdata.Kill:
 		return "Blocked by kill switch — " + r.Detail
 	case tickerdata.Judge:
+		if r.P == 0 && r.Detail != "" {
+			return "Blocked by judge — " + r.Detail
+		}
 		return fmt.Sprintf("Blocked by judge — p=%.2f is below the %.2f threshold", r.P, l.JudgeMin)
 	case tickerdata.Venue:
 		return fmt.Sprintf("Venue rejected — %s: %s", tickerdata.VenueName(r.Venue), r.Detail)

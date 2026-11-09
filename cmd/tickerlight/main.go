@@ -13,16 +13,33 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/journalread"
 	"github.com/jomakori/tickerlight/internal/server"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 )
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
+	journalPath := flag.String("journal", "", "trading-mcp attempt journal (JSONL) to render; empty serves the built-in sample ledger")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	// Two sources, one shape: with --journal the console shows the real
+	// attempt ledger, without it the built-in sample. A journal path that
+	// cannot be read is fatal on purpose — falling back to the sample
+	// would show plausible trades that never happened.
 	rows := tickerdata.Sample()
+	mode := "sample"
+	if *journalPath != "" {
+		loaded, err := journalread.Load(*journalPath)
+		if err != nil {
+			log.Error("read journal", "path", *journalPath, "err", err)
+			os.Exit(1)
+		}
+		rows = loaded
+		mode = "journal"
+	}
 
 	handler := server.New(server.Options{Rows: rows, Log: log})
 	srv := &http.Server{
@@ -44,7 +61,7 @@ func main() {
 		_ = srv.Shutdown(drain)
 	}()
 
-	log.Info("tickerlight console", "addr", *addr, "rows", len(rows), "mode", "sample-paper-only")
+	log.Info("tickerlight console", "addr", *addr, "rows", len(rows), "mode", mode)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Error("listen", "err", err)
 		os.Exit(1)
