@@ -45,6 +45,38 @@ type View struct {
 	// reporting anything but "disarmed" would misdescribe the binary.
 	Armed bool
 	Kill  bool
+	// Source names where the rows came from: empty means the built-in
+	// sample ledger. The header repeats it so a page showing real journal
+	// rows never claims to be sample data.
+	Source string
+}
+
+// SourceLabel is the origin phrase used in the title and session panel.
+func (v View) SourceLabel() string {
+	if v.Source == "" {
+		return "sample data"
+	}
+	return v.Source
+}
+
+// SourceBadge is the corner badge: the origin plus the standing paper-only
+// reminder.
+func (v View) SourceBadge() string {
+	if v.Source == "" {
+		return "Sample data · paper only"
+	}
+	return "Attempt journal · paper only"
+}
+
+// SourceLine is the session-panel sentence: the origin plus the standing
+// reminder that nothing here spends real money.
+func (v View) SourceLine() string {
+	switch v.SourceLabel() {
+	case "sample data":
+		return "Sample data · no real funds"
+	default:
+		return "Attempt journal · no real funds"
+	}
 }
 
 // ArmKillEnabled reports whether the arm/kill controls are wired to anything.

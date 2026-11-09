@@ -31,6 +31,7 @@ func main() {
 	// would show plausible trades that never happened.
 	rows := tickerdata.Sample()
 	mode := "sample"
+	source := ""
 	if *journalPath != "" {
 		loaded, err := journalread.Load(*journalPath)
 		if err != nil {
@@ -39,9 +40,10 @@ func main() {
 		}
 		rows = loaded
 		mode = "journal"
+		source = "attempt journal"
 	}
 
-	handler := server.New(server.Options{Rows: rows, Log: log})
+	handler := server.New(server.Options{Rows: rows, Log: log, Source: source})
 	srv := &http.Server{
 		Addr:              *addr,
 		Handler:           handler,
