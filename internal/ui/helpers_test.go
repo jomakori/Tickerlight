@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -404,8 +405,16 @@ func TestRiskStateCountsEveryGate(t *testing.T) {
 	if want := v.RollingUsed() / v.Limits.Daily; d.DailyPct != want {
 		t.Errorf("DailyPct = %v, want %v", d.DailyPct, want)
 	}
-	if d.CalN != 103 {
-		t.Errorf("CalN = %d, want 103", d.CalN)
+	// The calibration sample is the attempts that actually carry a score, so it
+	// must describe this ledger rather than the retired fixture's total.
+	wantCal := 0
+	for _, r := range v.Rows {
+		if _, ok := r.Score(); ok && r.Dispatched() {
+			wantCal++
+		}
+	}
+	if d.CalN != wantCal {
+		t.Errorf("CalN = %d, want %d", d.CalN, wantCal)
 	}
 	var lastFilled time.Time
 	var pSum float64
@@ -453,10 +462,29 @@ func TestRiskChecksReflectState(t *testing.T) {
 			t.Errorf("check %d (%s) has no observed value", i, checks[i].Label)
 		}
 	}
-	// The ledger side of the six checks passes on the sample fixture; the
-	// arming flag does not, because the default view is disarmed.
-	if !checks[0].OK || !checks[1].OK || !checks[2].OK || !checks[3].OK || !checks[4].OK {
-		t.Errorf("sample ledger should pass cap/drawdown/judge/calibration/symbols: %+v", checks)
+	// The ledger side of the six checks passes on the sample fixture, except the
+	// calibration floor: the scored attempts that reached a venue sit below the
+	// twenty-sample minimum, and the panel must say so instead of borrowing the
+	// old fixture total. The arming flag does not pass either, because the
+	// default view is disarmed.
+	if !checks[0].OK || !checks[1].OK || !checks[2].OK || checks[3].OK || !checks[4].OK {
+		t.Errorf("sample ledger should pass cap/drawdown/judge/symbols and fail only the calibration floor: %+v", checks)
+	}
+	wantSample := 0
+	for _, r := range v.Rows {
+		if _, ok := r.Score(); ok && r.Dispatched() {
+			wantSample++
+		}
+	}
+	if !strings.Contains(checks[3].Value, fmt.Sprintf("%d", wantSample)) || !strings.Contains(checks[3].Value, "20") {
+		t.Errorf("calibration check = %+v, want the observed score count against the floor", checks[3])
+	}
+
+	// Reaching the floor flips the calibration check.
+	enriched := v.RiskState()
+	enriched.CalN = enriched.Limits.MinN
+	if c := riskChecks(enriched)[3]; !c.OK {
+		t.Errorf("calibration check = %+v, want passing at the floor", c)
 	}
 	if checks[5].OK || !strings.Contains(checks[5].Value, "DISARMED") {
 		t.Errorf("arming check = %+v, want a failing DISARMED line on the default view", checks[5])
@@ -576,5 +604,133 @@ func TestChipAndOptionHelpers(t *testing.T) {
 	}
 	if boolWord(false) != "DISARMED" || dashIfEmpty("") != "—" || dashIfEmpty("x") != "x" {
 		t.Error("small render helpers")
+	}
+}
+
+// scored is a recorded judge score on an attempt.
+func scored(p float64) *float64 { return &p }
+
+func TestCalibrationDerivesBucketsFromRows(t *testing.T) {
+	rows := []tickerdata.Attempt{
+		{ID: 1, Outcome: tickerdata.Filled, Confidence: scored(0.42)},
+		{ID: 2, Outcome: tickerdata.Filled, Confidence: scored(0.42)},
+		{ID: 3, Outcome: tickerdata.Venue, Confidence: scored(0.42)},
+		{ID: 4, Outcome: tickerdata.Filled, Confidence: scored(0.81)},
+		{ID: 5, Outcome: tickerdata.Filled}, // unscored: excluded and counted
+	}
+	d := NewView(rows, tickerdata.SampleNow).Calibration()
+
+	if d.Empty {
+		t.Fatal("Empty = true, want an observation set")
+	}
+	if d.Sample != 4 || d.Wins != 3 {
+		t.Errorf("sample/wins = %d/%d, want 4/3", d.Sample, d.Wins)
+	}
+	if d.Excluded != 1 {
+		t.Errorf("Excluded = %d, want the unscored attempt", d.Excluded)
+	}
+	if len(d.Rows) != 2 {
+		t.Fatalf("rows = %d, want the two observed bands", len(d.Rows))
+	}
+	first := d.Rows[0]
+	if first.Label != "0.40–0.50" || first.N != 3 || first.Wins != 2 {
+		t.Errorf("first band = %+v, want 0.40–0.50 with 3 attempts and 2 wins", first)
+	}
+	if want := 2.0 / 3.0; first.Rate < want-1e-9 || first.Rate > want+1e-9 {
+		t.Errorf("Rate = %v, want %v", first.Rate, want)
+	}
+	if d.Rows[1].Label != "0.80–0.90" || d.Rows[1].N != 1 {
+		t.Errorf("second band = %+v, want the 0.80–0.90 singleton", d.Rows[1])
+	}
+	if d.MeetsN != 0 || d.MinN != 20 {
+		t.Errorf("MeetsN/MinN = %d/%d, want 0/20 for three-attempt bands", d.MeetsN, d.MinN)
+	}
+	if !first.Low {
+		t.Error("three attempts should be marked below the minimum sample")
+	}
+}
+
+func TestCalibrationWithoutScoresShowsTheEmptyShape(t *testing.T) {
+	rows := []tickerdata.Attempt{
+		{ID: 1, Outcome: tickerdata.Filled},
+		{ID: 2, Outcome: tickerdata.Cap},
+	}
+	d := NewView(rows, tickerdata.SampleNow).Calibration()
+
+	if !d.Empty {
+		t.Fatal("Empty = false, want the zero-observation shape")
+	}
+	if d.Sample != 0 || d.Wins != 0 {
+		t.Errorf("sample/wins = %d/%d, want 0/0", d.Sample, d.Wins)
+	}
+	if d.Excluded != 1 {
+		t.Errorf("Excluded = %d, want the one unscored attempt that reached a venue counted, and the gated one left out", d.Excluded)
+	}
+	if len(d.Rows) != 10 {
+		t.Fatalf("rows = %d, want every tenth of the range", len(d.Rows))
+	}
+	for _, r := range d.Rows {
+		if r.N != 0 || r.Wins != 0 {
+			t.Fatalf("row %+v carries observations, want none", r)
+		}
+	}
+}
+
+func TestCalibrationNeverUsesTheSampleFixture(t *testing.T) {
+	d := NewView(nil, tickerdata.SampleNow).Calibration()
+	labels := make(map[string]bool, len(d.Rows))
+	for _, r := range d.Rows {
+		labels[r.Label] = true
+	}
+	for _, sample := range tickerdata.CalSample() {
+		if labels[sample.Label] && d.Rows[0].N != 0 {
+			t.Fatalf("empty ledger rendered sample bucket %q", sample.Label)
+		}
+	}
+	if !labels["0.00–0.10"] || !labels["0.90–1.00"] {
+		t.Errorf("empty ledger labels = %v, want the derived tenths", labels)
+	}
+}
+
+func TestCalibrationChartFollowsTheDerivedBuckets(t *testing.T) {
+	// Low-confidence bands must still be plotted, so the axis cannot stay on the
+	// sample's 0.4–1.0 window.
+	low := tickerdata.Calibrate([]tickerdata.Attempt{
+		{ID: 1, Outcome: tickerdata.Filled, Confidence: scored(0.05)},
+		{ID: 2, Outcome: tickerdata.Cap, Confidence: scored(0.15)},
+	})
+	svg := CalibrationChart(low.Buckets, tickerdata.DefaultLimits())
+	if !strings.Contains(svg, ">0.0</text>") {
+		t.Errorf("derived chart axis does not reach 0.0:\n%s", svg)
+	}
+	if strings.Contains(svg, ">0.4</text>") && !strings.Contains(svg, ">0.2</text>") {
+		t.Errorf("derived chart kept the sample's 0.4 floor:\n%s", svg)
+	}
+
+	// The sample still plots on its original window.
+	sampleSVG := CalibrationChart(tickerdata.CalSample(), tickerdata.DefaultLimits())
+	if !strings.Contains(sampleSVG, ">0.4</text>") || !strings.Contains(sampleSVG, ">1.0</text>") {
+		t.Errorf("sample chart axis changed:\n%s", sampleSVG)
+	}
+}
+
+func TestJudgeStageShowsTheRecordedScore(t *testing.T) {
+	// The judge stage reports the score the journal recorded, and a dash when it
+	// recorded none — it must not fall back to the attempt's zero-valued field.
+	scoredAttempt := tickerdata.Attempt{Outcome: tickerdata.Filled, Confidence: scored(0.73)}
+	st := StagesOf(scoredAttempt)[1]
+	if st.KV[0].Key != "score" || st.KV[0].Value != "0.73" {
+		t.Errorf("judge stage KV = %+v, want the recorded 0.73", st.KV)
+	}
+	if !st.Checks[0].OK {
+		t.Errorf("judge check = %+v, want 0.73 above the threshold", st.Checks[0])
+	}
+
+	unscored := StagesOf(tickerdata.Attempt{Outcome: tickerdata.Cap})[1]
+	if unscored.KV[0].Value != "—" {
+		t.Errorf("unscored judge stage shows %q, want a dash", unscored.KV[0].Value)
+	}
+	if unscored.Checks[0].OK {
+		t.Errorf("unscored judge check = %+v, want it not to pass", unscored.Checks[0])
 	}
 }

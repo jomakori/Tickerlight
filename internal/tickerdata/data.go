@@ -104,9 +104,13 @@ type Attempt struct {
 	Px      float64
 	Outcome Outcome
 	P       float64
-	PnL     float64
-	Fees    float64
-	Detail  string
+	// Confidence is the judge's stated probability for this attempt, or nil
+	// when the journal recorded no score. It is a pointer so "no score
+	// recorded" stays distinguishable from a legitimate score of 0.
+	Confidence *float64
+	PnL        float64
+	Fees       float64
+	Detail     string
 
 	Notional   float64
 	CapBefore  float64
@@ -114,6 +118,26 @@ type Attempt struct {
 	Armed      bool
 	DispatchID string
 	Fill       *float64
+}
+
+// Score returns the judge's stated probability for the attempt. ok is false
+// when no score was recorded; that is not the same as a score of zero.
+func (a Attempt) Score() (float64, bool) {
+	if a.Confidence == nil {
+		return 0, false
+	}
+	return *a.Confidence, true
+}
+
+// Closed reports whether the attempt reached a terminal outcome. Pending and
+// intent rows never become attempts, but an unmapped outcome is also treated
+// as not closed rather than being counted as a trade.
+func (a Attempt) Closed() bool {
+	switch a.Outcome {
+	case Filled, Cap, Kill, Judge, Venue:
+		return true
+	}
+	return false
 }
 
 // Dispatched reports whether the attempt ever left the gate and reached a
@@ -162,6 +186,13 @@ func Sample() []Attempt {
 			panic(fmt.Sprintf("tickerdata: bad fixture timestamp %q: %v", sampleTS[i], err))
 		}
 		rows[i].TS = ts
+		// The fixture's judge probability is also the score it records, so the
+		// demo exercises the derived calibration page instead of the empty
+		// shape. Journal rows carry their own confidence from the judge stage.
+		if rows[i].P > 0 {
+			p := rows[i].P
+			rows[i].Confidence = &p
+		}
 	}
 	return Derive(rows)
 }
@@ -436,15 +467,27 @@ func keep(rows []Attempt, pred func(Attempt) bool) []Attempt {
 	return out
 }
 
-// Bucket is one calibration bucket.
+// calBands is the number of calibration buckets: tens of the confidence range.
+const calBands = 10
+
+// Bucket is one calibration bucket over the stated judge confidence.
 type Bucket struct {
 	Label string
-	N     int
-	Wins  int
+	// Low and High bound the bucket. Journal-derived buckets always carry
+	// them; the sample fixture predates them and is positioned by index.
+	Low  float64
+	High float64
+	N    int
+	Wins int
 }
 
-// Midpoint is the stated judge probability the bucket is drawn at.
+// Midpoint is the stated judge probability the bucket is drawn at: the middle
+// of its bounds when they are known, otherwise the sample fixture's index
+// lookup (CalSample is fixed seed data and carries no bounds).
 func (b Bucket) Midpoint(i int) float64 {
+	if b.High > b.Low {
+		return (b.Low + b.High) / 2
+	}
 	mids := []float64{0.55, 0.65, 0.75, 0.85, 0.95}
 	if i < 0 || i >= len(mids) {
 		return 0
@@ -452,8 +495,8 @@ func (b Bucket) Midpoint(i int) float64 {
 	return mids[i]
 }
 
-// CalSample is the aggregate calibration sample (not derived from the journal
-// rows, matching the spec).
+// CalSample is seed data for tests and the demo only. The Calibration panel is
+// derived from the journal attempts, never from this fixture.
 func CalSample() []Bucket {
 	return []Bucket{
 		{Label: "0.50–0.59", N: 14, Wins: 7},
@@ -464,11 +507,88 @@ func CalSample() []Bucket {
 	}
 }
 
-// CalEmpty is the zero-observation calibration fixture.
+// CalEmpty is the zero-observation shape: every band present, nothing scored.
+// It is what the panel shows when no closed attempt carries a judge score.
 func CalEmpty() []Bucket {
-	out := CalSample()
+	out := make([]Bucket, calBands)
 	for i := range out {
-		out[i].N, out[i].Wins = 0, 0
+		out[i] = calBand(i)
 	}
 	return out
+}
+
+// calBand builds band i with its bounds and a label stating them.
+func calBand(i int) Bucket {
+	lo := float64(i) / float64(calBands)
+	hi := float64(i+1) / float64(calBands)
+	return Bucket{Label: fmt.Sprintf("%.2f–%.2f", lo, hi), Low: lo, High: hi}
+}
+
+// Calibration is the derived calibration view: the buckets that actually have
+// observations, plus the closed attempts left out for having no score.
+type Calibration struct {
+	Buckets  []Bucket
+	Excluded int
+}
+
+// Scored is the number of closed attempts that carried a judge score.
+func (c Calibration) Scored() int {
+	var n int
+	for _, b := range c.Buckets {
+		n += b.N
+	}
+	return n
+}
+
+// Calibrate groups dispatched attempts by the confidence they carry.
+//
+// A bucket is a tenth of the probability range: [0.00,0.10) through
+// [0.90,1.00]. Only attempts that reached a venue count, because the claim
+// being checked is "a signal scored p fills p of the time" — an attempt the
+// gates refused never had the chance to disprove it, and counting it as a
+// loss would flatter low buckets. Every dispatched attempt with a score
+// contributes to its bucket's N, and wins are the attempts that actually
+// filled. Attempts with no score are counted separately rather than being
+// treated as a zero score, and buckets with no observations are omitted so
+// the page never draws an empty dot.
+func Calibrate(rows []Attempt) Calibration {
+	bands := CalEmpty()
+	excluded := 0
+	for _, r := range rows {
+		if !r.Dispatched() {
+			continue
+		}
+		score, ok := r.Score()
+		if !ok {
+			excluded++
+			continue
+		}
+		band := &bands[confidenceBand(score)]
+		band.N++
+		if r.Outcome == Filled {
+			band.Wins++
+		}
+	}
+	out := make([]Bucket, 0, len(bands))
+	for _, b := range bands {
+		if b.N == 0 {
+			continue
+		}
+		out = append(out, b)
+	}
+	return Calibration{Buckets: out, Excluded: excluded}
+}
+
+// confidenceBand places a confidence in its tenth-width band, saturating
+// outside 0–1 instead of dropping the observation.
+func confidenceBand(c float64) int {
+	if c <= 0 {
+		return 0
+	}
+	for i := 0; i < calBands-1; i++ {
+		if c < float64(i+1)/float64(calBands) {
+			return i
+		}
+	}
+	return calBands - 1
 }

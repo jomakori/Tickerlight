@@ -225,10 +225,14 @@ func ReasonText(r tickerdata.Attempt) string {
 	case tickerdata.Kill:
 		return "Blocked by kill switch — " + r.Detail
 	case tickerdata.Judge:
-		if r.P == 0 && r.Detail != "" {
+		p := r.P
+		if score, ok := r.Score(); ok {
+			p = score
+		}
+		if p == 0 && r.Detail != "" {
 			return "Blocked by judge — " + r.Detail
 		}
-		return fmt.Sprintf("Blocked by judge — p=%.2f is below the %.2f threshold", r.P, l.JudgeMin)
+		return fmt.Sprintf("Blocked by judge — p=%.2f is below the %.2f threshold", p, l.JudgeMin)
 	case tickerdata.Venue:
 		return fmt.Sprintf("Venue rejected — %s: %s", tickerdata.VenueName(r.Venue), r.Detail)
 	default:

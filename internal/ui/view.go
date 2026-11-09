@@ -104,11 +104,27 @@ type CalibrationData struct {
 	Wins    int
 	MeetsN  int
 	MinN    int
+	// Excluded is the number of closed attempts left out of the buckets
+	// because the journal recorded no judge score for them.
+	Excluded int
+	// Empty is true when no closed attempt carried a score, so the panel is
+	// showing the zero-observation shape rather than an observation set.
+	Empty bool
 }
 
-// Calibration prepares the Calibration panel.
+// Calibration prepares the Calibration panel from the journal's attempts.
+//
+// Nothing here is fixture data: the buckets are derived from the rows the
+// console was started with. A ledger whose attempts carry no judge score
+// renders the zero-observation shape (every band present, nothing counted)
+// instead of borrowing the sample.
 func (v View) Calibration() CalibrationData {
-	buckets := tickerdata.CalSample()
+	cal := tickerdata.Calibrate(v.Rows)
+	buckets := cal.Buckets
+	empty := len(buckets) == 0
+	if empty {
+		buckets = tickerdata.CalEmpty()
+	}
 	rows := make([]CalRow, 0, len(buckets))
 	var n, wins, meets int
 	for i, b := range buckets {
@@ -132,7 +148,17 @@ func (v View) Calibration() CalibrationData {
 			Low:    b.N < v.Limits.MinN,
 		})
 	}
-	return CalibrationData{View: v, Buckets: buckets, Rows: rows, Sample: n, Wins: wins, MeetsN: meets, MinN: v.Limits.MinN}
+	return CalibrationData{
+		View:     v,
+		Buckets:  buckets,
+		Rows:     rows,
+		Sample:   n,
+		Wins:     wins,
+		MeetsN:   meets,
+		MinN:     v.Limits.MinN,
+		Excluded: cal.Excluded,
+		Empty:    empty,
+	}
 }
 
 // RiskData is the prepared Risk state panel state.
@@ -174,17 +200,21 @@ func (v View) RiskState() RiskData {
 			dd = mathMax(dd, peak-eq)
 			lastFill = HMS(r.TS)
 		}
-		pSum += r.P
+		score, scored := r.Score()
+		if !scored {
+			score = r.P
+		}
+		pSum += score
 		pN++
 	}
 	meanP := 0.0
 	if pN > 0 {
 		meanP = pSum / float64(pN)
 	}
-	calN := 0
-	for _, b := range tickerdata.CalSample() {
-		calN += b.N
-	}
+	// The calibration sample is the set of attempts that actually carry a
+	// judge score, so the floor check describes this ledger rather than the
+	// retired fixture's total.
+	calN := tickerdata.Calibrate(v.Rows).Scored()
 	return RiskData{
 		View:      v,
 		Used:      v.RollingUsed(),

@@ -61,8 +61,15 @@ system working.
 ### AI calibration
 
 A calibration view plots the judge's stated probability against realized win rate, bucket by
-bucket. Minimum-sample floors mean thin buckets can't quietly promote a model that only looks
-confident. This is the part you can't get from a P&L chart.
+bucket. The buckets come from the attempt journal itself: attempts that reached a venue are
+grouped into tenths of a point of stated probability, and every bucket reports its n beside its
+win rate. Attempts the journal recorded without a score are left out and counted, so a missing
+score never reads as a confident zero. Gate refusals stay out of the buckets too — an attempt the
+judge or a cap stopped never had the chance to fill, and counting it as a loss would flatter the
+low end of the curve. Minimum-sample floors mean thin buckets can't quietly promote a model that
+only looks confident. This is the part you can't get from a P&L chart.
+
+![Calibration: stated probability against realized win rate, bucket by bucket](docs/screenshots/calibration-1280.png)
 
 ### Risk visibility
 

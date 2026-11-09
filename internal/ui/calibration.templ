@@ -1,21 +1,28 @@
 package ui
 
-import (
-	"strconv"
-
-)
+import "strconv"
 
 // Calibration compares the judge's stated probabilities with realized win
-// rates, and makes the minimum-sample rule visible instead of implied.
+// rates, and makes the minimum-sample rule visible instead of implied. Every
+// number here is derived from the attempts the console was started with.
 templ Calibration(d CalibrationData) {
 	<section class="grid" aria-label="Calibration">
 		<div class="card c12">
 			<div class="row">
 				<h2>Calibration <span class="nd">· judge ≥ { Pct(d.Limits.JudgeMin, 0) } · minimum n { strconv.Itoa(d.MinN) }</span></h2>
-				<span class="tx2">{ strconv.Itoa(d.Sample) } judge calls · { strconv.Itoa(d.MeetsN) } of { strconv.Itoa(len(d.Rows)) } buckets meet the floor</span>
+				<span class="tx2">{ strconv.Itoa(d.Sample) } scored attempts · { strconv.Itoa(d.Excluded) } excluded (no score) · { strconv.Itoa(d.MeetsN) } of { strconv.Itoa(len(d.Rows)) } buckets meet the floor</span>
 			</div>
+			if d.Empty {
+				<div class="empty">
+					@Icon("hourglass", 24)
+					<div>
+						<strong>No scored attempts yet</strong>
+						The journal recorded no judge score for any closed attempt, so every bucket is empty. This view fills in as soon as an attempt carries a confidence — it never falls back to sample data.
+					</div>
+				</div>
+			}
 			<div class="mini four">
-				<div><span class="lbl">Judge calls</span><span class="num n32">{ strconv.Itoa(d.Sample) }</span></div>
+				<div><span class="lbl">Scored attempts</span><span class="num n32">{ strconv.Itoa(d.Sample) }</span></div>
 				<div><span class="lbl">Realized win rate</span><span class="num n32">{ Pct(d.WinRate(), 1) }</span></div>
 				<div><span class="lbl">Mean stated p</span><span class="num n32">{ Pct(d.MeanStated(), 1) }</span></div>
 				<div><span class="lbl">Buckets under floor</span><span class="num n32">{ strconv.Itoa(len(d.Rows) - d.MeetsN) }</span></div>
@@ -25,7 +32,6 @@ templ Calibration(d CalibrationData) {
 				Dots are realized win rate per probability bucket; the dashed diagonal is perfect calibration. A bucket with n below the floor is drawn hatched and cannot promote anything.
 			</p>
 		</div>
-
 		<div class="card c12">
 			<h2>Buckets</h2>
 			<div class="scroll">
@@ -47,11 +53,25 @@ templ Calibration(d CalibrationData) {
 								<td class="mono">{ b.Label }</td>
 								<td class="r mono">{ strconv.Itoa(b.N) }</td>
 								<td class="r mono">{ strconv.Itoa(b.Wins) }</td>
-								<td class="r mono">{ Pct(b.Rate, 0) }</td>
+								<td class="r mono">
+									if b.N > 0 {
+										{ Pct(b.Rate, 0) }
+									} else {
+										—
+									}
+								</td>
 								<td class="r mono">{ Pct(b.Stated, 0) }</td>
-								<td class={ "r mono", templ.KV("neg", b.Delta < 0) }>{ Pct(b.Delta, 0) }</td>
+								<td class="r mono">
+									if b.N > 0 {
+										<span class={ templ.KV("neg", b.Delta < 0) }>{ Pct(b.Delta, 0) }</span>
+									} else {
+										—
+									}
+								</td>
 								<td>
-									if b.Low {
+									if b.N == 0 {
+										<span class="bd">No observations</span>
+									} else if b.Low {
 										<span class="bd blk">@Icon("hourglass", 12) Low sample</span>
 									} else if b.Delta < -0.07 {
 										<span class="bd bad">@Icon("bang", 12) Overconfident</span>
@@ -65,7 +85,7 @@ templ Calibration(d CalibrationData) {
 				</table>
 			</div>
 			<p class="tx2" style="margin:12px 0 0">
-				Win rate is realized fills over bucket n. Stated p is the bucket midpoint, the value the judge claimed when it opened the trade.
+				Buckets are tenths of the judge's stated probability, derived from attempts that reached a venue. Win rate is realized fills over bucket n; gate refusals and attempts recorded without a score are left out, and the unscored ones are counted above.
 			</p>
 		</div>
 	</section>

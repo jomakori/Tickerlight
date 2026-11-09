@@ -183,3 +183,98 @@ func TestMap_UnknownStageDropped(t *testing.T) {
 		t.Fatalf("rows = %+v, want an unmappable stage dropped", rows)
 	}
 }
+
+// score is the shape a journal record uses to carry a judge probability.
+func score(p float64) *float64 { return &p }
+
+func TestMap_JudgeScoreDoesNotOverwriteVenueOutcome(t *testing.T) {
+	// The judge scores the attempt, then the venue fills it. Both facts have to
+	// survive: the outcome belongs to the venue, the score to the judge.
+	judge := rec(7, stageJudge, outcomeBlocked, "judge_below_threshold")
+	judge.Confidence = score(0.42)
+	venue := rec(7, stageVenue, outcomeFilled, "")
+	venue.Timestamp = judge.Timestamp.Add(2 * time.Second)
+
+	rows := Map([]Record{judge, venue})
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want one attempt", len(rows))
+	}
+	row := rows[0]
+	if row.Outcome != tickerdata.Filled {
+		t.Fatalf("outcome = %q, want the venue fill to survive the judge record", row.Outcome)
+	}
+	got, ok := row.Score()
+	if !ok || got != 0.42 {
+		t.Fatalf("score = %v (recorded %v), want the judge's 0.42", got, ok)
+	}
+	if !row.Armed {
+		t.Error("a filled attempt necessarily passed the arm gate")
+	}
+}
+
+func TestMap_JudgeScoreArrivingLastKeepsOutcome(t *testing.T) {
+	// The judge record may also land after the terminal one; it must still only
+	// contribute the score.
+	venue := rec(8, stageVenue, outcomeFilled, "")
+	judge := rec(8, stageJudge, outcomeBlocked, "judge_below_threshold")
+	judge.Timestamp = venue.Timestamp.Add(time.Second)
+	judge.Confidence = score(0.55)
+
+	row := Map([]Record{venue, judge})[0]
+	if row.Outcome != tickerdata.Filled {
+		t.Fatalf("outcome = %q, want filled", row.Outcome)
+	}
+	if got, ok := row.Score(); !ok || got != 0.55 {
+		t.Fatalf("score = %v (recorded %v), want 0.55", got, ok)
+	}
+	if !row.TS.Equal(venue.Timestamp) {
+		t.Errorf("timestamp = %v, want the terminal record's %v", row.TS, venue.Timestamp)
+	}
+}
+
+func TestMap_JudgeRefusalAloneStillBecomesTheOutcome(t *testing.T) {
+	// With no other record the refusal is the attempt's terminal state; the
+	// score rides along with it.
+	r := rec(9, stageJudge, outcomeBlocked, "judge_below_threshold")
+	r.Confidence = score(0.31)
+
+	row := Map([]Record{r})[0]
+	if row.Outcome != tickerdata.Judge {
+		t.Fatalf("outcome = %q, want judge when nothing else named an outcome", row.Outcome)
+	}
+	if got, ok := row.Score(); !ok || got != 0.31 {
+		t.Fatalf("score = %v (recorded %v), want 0.31", got, ok)
+	}
+}
+
+func TestMap_ScoreOfZeroIsNotAMissingScore(t *testing.T) {
+	scored := rec(10, stageJudge, outcomeBlocked, "judge_below_threshold")
+	scored.Confidence = score(0)
+	unscored := rec(11, stageJudge, outcomeBlocked, "judge_below_threshold")
+
+	rows := Map([]Record{scored, unscored})
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	if got, ok := rows[0].Score(); !ok || got != 0 {
+		t.Errorf("attempt 10 score = %v (recorded %v), want a recorded zero", got, ok)
+	}
+	if _, ok := rows[1].Score(); ok {
+		t.Error("attempt 11 reported a score the journal never recorded")
+	}
+}
+
+func TestMap_GateOutcomeKeepsJudgeScore(t *testing.T) {
+	judge := rec(12, stageJudge, outcomeBlocked, "judge_below_threshold")
+	judge.Confidence = score(0.77)
+	gate := rec(12, stageGate, outcomeBlocked, "position_size_cap_exceeded")
+	gate.Timestamp = judge.Timestamp.Add(time.Second)
+
+	row := Map([]Record{judge, gate})[0]
+	if row.Outcome != tickerdata.Cap {
+		t.Fatalf("outcome = %q, want the gate's cap outcome", row.Outcome)
+	}
+	if got, ok := row.Score(); !ok || got != 0.77 {
+		t.Fatalf("score = %v (recorded %v), want 0.77", got, ok)
+	}
+}
