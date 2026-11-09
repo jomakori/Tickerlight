@@ -66,10 +66,17 @@ func StagesOf(r tickerdata.Attempt) []Stage {
 				{"side is buy or sell", strings.ToUpper(r.Side), true},
 			}
 		case 1:
-			st.KV = []KV{{"p", fmt.Sprintf("%.2f", r.P)}, {"threshold", fmt.Sprintf("%.2f", lim.JudgeMin)}}
+			// The score comes from the journal's confidence when one was
+			// recorded; an attempt whose score was never logged shows a
+			// dash rather than a fabricated 0.00.
+			score, scored := r.Score()
+			pText := "—"
+			if scored {
+				pText = fmt.Sprintf("%.2f", score)
+			}
+			st.KV = []KV{{"score", pText}, {"threshold", fmt.Sprintf("%.2f", lim.JudgeMin)}}
 			st.Checks = []Check{
-				{"p ≥ threshold", fmt.Sprintf("%.2f ≥ %.2f", r.P, lim.JudgeMin), r.P >= lim.JudgeMin},
-				{"calibration sample n ≥ minimum", fmt.Sprintf("%d ≥ %d", 103, lim.MinN), true},
+				{"score ≥ threshold", fmt.Sprintf("%s ≥ %.2f", pText, lim.JudgeMin), scored && score >= lim.JudgeMin},
 			}
 			if r.Outcome == tickerdata.Judge {
 				st.Reason = ReasonText(r)

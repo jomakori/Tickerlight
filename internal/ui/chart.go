@@ -157,6 +157,39 @@ func EquityChart(rows []tickerdata.Attempt, allLen int) string {
 	return b.String()
 }
 
+// chartDomain is the square value range the calibration plot draws. It spans
+// the bucket bounds when they are known (the derived bands carry them) and
+// otherwise the bucket midpoints, rounded out to whole tenths with a tenth of
+// margin. A ledger with no observations still gets the full 0–1 frame.
+func chartDomain(buckets []tickerdata.Bucket) (lo, hi float64) {
+	if len(buckets) == 0 {
+		return 0.4, 1.0
+	}
+	nlo, nhi := 1.0, 0.0
+	for i, b := range buckets {
+		blo, bhi := b.Low, b.High
+		if bhi <= blo {
+			m := b.Midpoint(i)
+			blo, bhi = m, m
+		}
+		if blo < nlo {
+			nlo = blo
+		}
+		if bhi > nhi {
+			nhi = bhi
+		}
+	}
+	lo = math.Max(0, math.Floor(nlo*10-1)/10)
+	hi = math.Min(1, math.Ceil(nhi*10+1)/10)
+	if hi-lo < 0.3 {
+		hi = math.Min(1, lo+0.3)
+	}
+	if hi <= lo {
+		lo = math.Max(0, hi-0.3)
+	}
+	return lo, hi
+}
+
 // CalibrationChart renders the win-rate-vs-stated-probability scatter.
 func CalibrationChart(buckets []tickerdata.Bucket, limits tickerdata.Limits) string {
 	const (
@@ -166,23 +199,40 @@ func CalibrationChart(buckets []tickerdata.Bucket, limits tickerdata.Limits) str
 		r   = 12
 		top = 20
 		bot = h - 40
-		lo  = 0.4
-		hi  = 1.0
 	)
+	// The axis follows the buckets actually plotted, so a journal whose scores
+	// sit in the low bands is still visible instead of falling off a fixed
+	// 0.4–1.0 window. The sample fixture lands on the same window as before.
+	lo, hi := chartDomain(buckets)
 	x := func(v float64) float64 { return l + float64(w-l-r)*(v-lo)/(hi-lo) }
-	y := func(v float64) float64 { return top + float64(bot-top)*(1-(v-lo)/(hi-lo)) }
+	// The y axis is a win rate, always 0–1, so it must not inherit the
+	// confidence window the x axis uses — sharing it drew a bucket at 100%
+	// far above the plot whenever the scores clustered in a narrow band.
+	y := func(v float64) float64 { return top + float64(bot-top)*(1-v) }
 	const mono = `font-family="ui-monospace,Menlo,monospace"`
+
+	ticks := int(math.Round((hi - lo) * 10))
+	if ticks < 2 {
+		ticks = 2
+	}
+	step := (hi - lo) / float64(ticks)
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf(`<svg viewBox="0 0 %d %d" role="img" aria-label="Calibration plot: realized win rate against stated judge probability">`, w, h))
 	b.WriteString(`<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#141816"/><line x1="0" y1="0" x2="0" y2="6" stroke="#A9B0A6" stroke-width="2"/></pattern></defs>`)
-	for i := 0; i <= 6; i++ {
-		v := lo + float64(i)/10
-		b.WriteString(fmt.Sprintf(`<line x1="%d" x2="%d" y1="%.1f" y2="%.1f" stroke="#ffffff0d"/><line y1="%d" y2="%d" x1="%.1f" x2="%.1f" stroke="#ffffff0d"/><text x="%d" y="%.1f" text-anchor="end" fill="#7F877C" font-size="11" %s>%.1f</text><text x="%.1f" y="%d" text-anchor="middle" fill="#7F877C" font-size="11" %s>%.1f</text>`,
-			l, w-r, y(v), y(v), top, bot, x(v), x(v), l-8, y(v)+4, mono, v, x(v), bot+16, mono, v))
+	for i := 0; i <= ticks; i++ {
+		v := lo + step*float64(i)
+		b.WriteString(fmt.Sprintf(`<line y1="%d" y2="%d" x1="%.1f" x2="%.1f" stroke="#ffffff0d"/><text x="%.1f" y="%d" text-anchor="middle" fill="#7F877C" font-size="11" %s>%.1f</text>`,
+			top, bot, x(v), x(v), x(v), bot+16, mono, v))
 	}
+	for i := 0; i <= 4; i++ {
+		v := float64(i) / 4
+		b.WriteString(fmt.Sprintf(`<line x1="%d" x2="%d" y1="%.1f" y2="%.1f" stroke="#ffffff0d"/><text x="%d" y="%.1f" text-anchor="end" fill="#7F877C" font-size="11" %s>%.2f</text>`,
+			l, w-r, y(v), y(v), l-8, y(v)+4, mono, v))
+	}
+	diag := lo + 0.62*(hi-lo)
 	b.WriteString(fmt.Sprintf(`<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="#7F877C" stroke-width="1.5" stroke-dasharray="6 5"/><text x="%.1f" y="%.1f" fill="#7F877C" font-size="11" transform="rotate(-39 %.1f %.1f)">perfectly calibrated</text>`,
-		x(.4), y(.4), x(1), y(1), x(.62), y(.62)-8, x(.62), y(.62)-8))
+		x(lo), y(lo), x(hi), y(hi), x(diag), y(diag)-8, x(diag), y(diag)-8))
 
 	var good [][2]float64
 	var marks strings.Builder

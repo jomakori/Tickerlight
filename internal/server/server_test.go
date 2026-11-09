@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/journalread"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 	"github.com/jomakori/tickerlight/internal/web"
 )
@@ -571,5 +572,106 @@ func TestRangePillsResolveToARoute(t *testing.T) {
 				t.Fatalf("GET %s = %d, want 200", path, res.status)
 			}
 		})
+	}
+}
+
+// journalHandler serves attempts mapped from journal records, the way the
+// binary does when it is pointed at an attempt journal instead of the sample.
+func journalHandler(t *testing.T, records []journalread.Record) http.Handler {
+	t.Helper()
+	return New(Options{
+		Rows:   journalread.Map(records),
+		Now:    func() time.Time { return tickerdata.SampleNow },
+		Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Source: "attempt journal",
+	})
+}
+
+func judgeRecord(id int64, p float64) journalread.Record {
+	return journalread.Record{
+		AttemptID:  id,
+		Stage:      "judge",
+		Outcome:    "blocked",
+		ReasonCode: "judge_below_threshold",
+		Confidence: &p,
+		Timestamp:  tickerdata.SampleNow.Add(-time.Hour),
+	}
+}
+
+func venueRecord(id int64) journalread.Record {
+	return journalread.Record{
+		AttemptID: id,
+		Stage:     "venue",
+		Outcome:   "filled",
+		Venue:     "coinbase",
+		Symbol:    "BTC-USD",
+		Timestamp: tickerdata.SampleNow.Add(-59 * time.Minute),
+	}
+}
+
+func TestCalibrationRendersDerivedBuckets(t *testing.T) {
+	// Three scored attempts land in the same band; two of them filled, so the
+	// page has to report the band, its n and a two-of-three win rate.
+	h := journalHandler(t, []journalread.Record{
+		judgeRecord(1, 0.42), venueRecord(1),
+		judgeRecord(2, 0.42), venueRecord(2),
+		judgeRecord(3, 0.42), journalread.Record{
+			AttemptID: 3,
+			Stage:     "venue",
+			Outcome:   "rejected",
+			Venue:     "coinbase",
+			Symbol:    "BTC-USD",
+			Timestamp: tickerdata.SampleNow.Add(-58 * time.Minute),
+		},
+	})
+	body := get(t, h, "/calibration").body
+
+	if !strings.Contains(body, "0.40–0.50") {
+		t.Errorf("calibration page has no 0.40–0.50 bucket:\n%s", body)
+	}
+	if !strings.Contains(body, "3 scored attempts · 0 excluded") {
+		t.Errorf("calibration page does not report the derived sample:\n%s", body)
+	}
+	if strings.Contains(body, "0.90+") || strings.Contains(body, " judge calls") {
+		t.Error("calibration page still carries the retired sample fixture")
+	}
+	// Every bucket is under the minimum-sample floor, and the page says so.
+	if !strings.Contains(body, "Low sample") {
+		t.Error("calibration page does not mark the under-sampled bucket")
+	}
+}
+
+func TestCalibrationEmptyJournalRendersEmptyState(t *testing.T) {
+	h := journalHandler(t, nil)
+	body := get(t, h, "/calibration").body
+
+	if !strings.Contains(body, "No scored attempts yet") {
+		t.Errorf("empty journal does not render the empty state:\n%s", body)
+	}
+	if !strings.Contains(body, "0 excluded (no score)") {
+		t.Errorf("empty journal does not report the scoreless attempts:\n%s", body)
+	}
+	// The zero-observation shape still draws all ten bands.
+	if !strings.Contains(body, "0.00–0.10") || !strings.Contains(body, "0.90–1.00") {
+		t.Errorf("empty state does not draw the band frame:\n%s", body)
+	}
+}
+
+func TestNoPathServesTheCalibrationSample(t *testing.T) {
+	// A journal with no judge scores must never fall back to CalSample, on any
+	// page that could show calibration data.
+	h := New(Options{
+		Rows: []tickerdata.Attempt{{ID: 1, Outcome: tickerdata.Filled, TS: tickerdata.SampleNow}},
+		Now:  func() time.Time { return tickerdata.SampleNow },
+		Log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	for _, path := range []string{"/", "/calibration", "/risk", "/journal"} {
+		res := get(t, h, path)
+		if res.status != http.StatusOK {
+			t.Fatalf("%s status = %d", path, res.status)
+		}
+		if strings.Contains(res.body, "0.90+") {
+			t.Errorf("%s served the sample calibration fixture", path)
+		}
 	}
 }

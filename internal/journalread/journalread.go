@@ -23,17 +23,20 @@ import (
 // Record is one decoded journal line. Only the fields the console renders
 // are decoded; the server may add fields without breaking this reader.
 type Record struct {
-	AttemptID       int64     `json:"attempt_id"`
-	ParentAttemptID int64     `json:"parent_attempt_id"`
-	Stage           string    `json:"stage"`
-	Outcome         string    `json:"outcome"`
-	ReasonCode      string    `json:"reason_code"`
-	NotionalCents   int64     `json:"notional_cents"`
-	Symbol          string    `json:"symbol"`
-	Venue           string    `json:"venue"`
-	ClientOrderID   string    `json:"client_order_id"`
-	BrokerOrderID   string    `json:"broker_order_id"`
-	Timestamp       time.Time `json:"timestamp"`
+	AttemptID       int64  `json:"attempt_id"`
+	ParentAttemptID int64  `json:"parent_attempt_id"`
+	Stage           string `json:"stage"`
+	Outcome         string `json:"outcome"`
+	ReasonCode      string `json:"reason_code"`
+	// Confidence is the judge's stated probability. It is a pointer so a
+	// missing score stays distinguishable from a recorded score of 0.
+	Confidence    *float64  `json:"confidence"`
+	NotionalCents int64     `json:"notional_cents"`
+	Symbol        string    `json:"symbol"`
+	Venue         string    `json:"venue"`
+	ClientOrderID string    `json:"client_order_id"`
+	BrokerOrderID string    `json:"broker_order_id"`
+	Timestamp     time.Time `json:"timestamp"`
 }
 
 // Journal stages and outcomes the console maps. They are the server's
@@ -101,12 +104,22 @@ func Read(r io.Reader) (records []Record, malformed int, err error) {
 // Only trade-attempt stages become rows: an intent record alone is not a
 // finished attempt, and supervisor/revocation records describe the process
 // rather than a trade, so both are ignored. When an attempt has several
-// eligible records the last one wins — that is its terminal outcome, the
-// same rule the order path itself uses to answer a retry.
+// eligible records the last terminal one wins — that is its outcome, the same
+// rule the order path itself uses to answer a retry.
+//
+// A judge record is not one of those terminal records: it reports the score
+// the judge gave the attempt, not what became of it. It therefore never
+// replaces a venue or gate outcome — it adds the confidence and keeps the
+// outcome the attempt actually reached. Only when the judge refusal is the
+// sole record does its outcome stand in as the attempt's terminal state.
 func Map(records []Record) []tickerdata.Attempt {
 	type slot struct {
 		attempt tickerdata.Attempt
 		seen    bool
+		// outcomeSet is true once some record named the attempt's
+		// outcome. A judge record sets it too; unlike the others it does
+		// not keep the slot from being replaced by a later terminal record.
+		outcomeSet bool
 	}
 
 	ordered := make([]int64, 0, len(records))
@@ -116,9 +129,14 @@ func Map(records []Record) []tickerdata.Attempt {
 		if r.Stage == stageSupervisor || r.Stage == stageRevocation {
 			continue
 		}
-		if r.Stage == stageIntent || r.Outcome == outcomePending {
-			// An intent, or any still-pending record, has no terminal
-			// outcome to show yet.
+		if r.Stage == stageIntent {
+			// An intent record has no terminal outcome to show yet.
+			continue
+		}
+		if r.Outcome == outcomePending && r.Stage != stageJudge {
+			// A still-pending trade record has no terminal outcome. A judge
+			// record is the exception: it may be pending and still report
+			// the score the attempt was given.
 			continue
 		}
 
@@ -133,22 +151,27 @@ func Map(records []Record) []tickerdata.Attempt {
 			byID[r.AttemptID] = s
 			ordered = append(ordered, r.AttemptID)
 		}
-		s.seen = true
-		s.attempt = tickerdata.Attempt{
-			ID:         int(r.AttemptID),
-			TS:         r.Timestamp.UTC(),
-			Venue:      r.Venue,
-			Symbol:     r.Symbol,
-			Side:       "", // the journal records no side; shown as unknown
-			Notional:   float64(r.NotionalCents) / 100,
-			Outcome:    outcome,
-			Detail:     detailFor(r),
-			DispatchID: r.ClientOrderID,
-			// A row that reached the venue necessarily passed the arm
-			// gate; a blocked row's arm state at the time is not in the
-			// journal, so it is reported as not armed rather than guessed.
-			Armed: outcome == tickerdata.Filled || outcome == tickerdata.Venue,
+
+		if r.Stage == stageJudge {
+			if !s.outcomeSet {
+				s.attempt = attemptFor(r, outcome)
+				s.outcomeSet = true
+			} else if r.Confidence != nil {
+				s.attempt.Confidence = r.Confidence
+			}
+			s.seen = true
+			continue
 		}
+
+		// The newest terminal record wins outright, but it must not
+		// discard a score the judge already recorded.
+		confidence := s.attempt.Confidence
+		s.attempt = attemptFor(r, outcome)
+		if r.Confidence == nil {
+			s.attempt.Confidence = confidence
+		}
+		s.seen = true
+		s.outcomeSet = true
 	}
 
 	rows := make([]tickerdata.Attempt, 0, len(ordered))
@@ -158,6 +181,26 @@ func Map(records []Record) []tickerdata.Attempt {
 		}
 	}
 	return withRollingCaps(rows)
+}
+
+// attemptFor renders one journal record as an attempt row.
+func attemptFor(r Record, outcome tickerdata.Outcome) tickerdata.Attempt {
+	return tickerdata.Attempt{
+		ID:         int(r.AttemptID),
+		TS:         r.Timestamp.UTC(),
+		Venue:      r.Venue,
+		Symbol:     r.Symbol,
+		Side:       "", // the journal records no side; shown as unknown
+		Notional:   float64(r.NotionalCents) / 100,
+		Outcome:    outcome,
+		Confidence: r.Confidence,
+		Detail:     detailFor(r),
+		DispatchID: r.ClientOrderID,
+		// A row that reached the venue necessarily passed the arm gate;
+		// a blocked row's arm state at the time is not in the journal,
+		// so it is reported as not armed rather than guessed.
+		Armed: outcome == tickerdata.Filled || outcome == tickerdata.Venue,
+	}
 }
 
 // withRollingCaps fills the rolling-cap columns from the rows themselves.

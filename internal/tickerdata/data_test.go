@@ -1,6 +1,7 @@
 package tickerdata
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -284,13 +285,22 @@ func TestCalibrationBuckets(t *testing.T) {
 		t.Error("out-of-range midpoint should be zero")
 	}
 
+	// CalEmpty is the zero-observation shape: every tenth of the range present
+	// and nothing counted, so the page can draw the frame without inventing
+	// observations.
 	empty := CalEmpty()
+	if len(empty) != 10 {
+		t.Fatalf("CalEmpty has %d bands, want 10", len(empty))
+	}
 	for i := range empty {
 		if empty[i].N != 0 || empty[i].Wins != 0 {
 			t.Errorf("CalEmpty bucket %q not zeroed", empty[i].Label)
 		}
-		if empty[i].Label != buckets[i].Label {
-			t.Errorf("CalEmpty changed bucket labels")
+		if mid := empty[i].Midpoint(i); mid <= 0 || mid >= 1 {
+			t.Errorf("CalEmpty bucket %q midpoint %v out of range", empty[i].Label, mid)
+		}
+		if empty[i].High <= empty[i].Low {
+			t.Errorf("CalEmpty bucket %q has no bounds", empty[i].Label)
 		}
 	}
 }
@@ -334,4 +344,93 @@ func almostEqual(a, b float64) bool {
 		d = -d
 	}
 	return d < 1e-9
+}
+
+// confidence is a recorded judge score, the shape the attempt carries.
+func confidence(p float64) *float64 { return &p }
+
+func TestCalibrateBucketsConfidenceAndRealizedWinRate(t *testing.T) {
+	rows := []Attempt{
+		{ID: 1, Outcome: Filled, Confidence: confidence(0.05)}, // band 0, win
+		{ID: 2, Outcome: Venue, Confidence: confidence(0.05)},  // band 0, loss
+		{ID: 3, Outcome: Filled, Confidence: confidence(0.1)},  // band 1 (lower edge), win
+		{ID: 4, Outcome: Filled, Confidence: confidence(0.5)},  // band 5 (lower edge), win
+		{ID: 5, Outcome: Venue, Confidence: confidence(0.5)},   // band 5, loss
+		{ID: 6, Outcome: Venue, Confidence: confidence(0.9)},   // band 9 (lower edge), loss
+		{ID: 7, Outcome: Filled, Confidence: confidence(1)},    // band 9 (upper edge), win
+		{ID: 8, Outcome: Filled},                               // no score: excluded
+		{ID: 9, Outcome: Outcome("pending")},                   // not closed: not a bucket input
+		// A gate-blocked attempt carries a score but never reached a venue, so
+		// it must not move any bucket's win rate.
+		{ID: 10, Outcome: Cap, Confidence: confidence(0.55)},
+		{ID: 11, Outcome: Kill, Confidence: confidence(0.05)},
+	}
+
+	cal := Calibrate(rows)
+
+	want := []struct {
+		label     string
+		low, high float64
+		n, wins   int
+		midpoint  float64
+		winRate   float64
+	}{
+		{"0.00–0.10", 0, 0.1, 2, 1, 0.05, 0.5},
+		{"0.10–0.20", 0.1, 0.2, 1, 1, 0.15, 1},
+		{"0.50–0.60", 0.5, 0.6, 2, 1, 0.55, 0.5},
+		{"0.90–1.00", 0.9, 1, 2, 1, 0.95, 0.5},
+	}
+	if len(cal.Buckets) != len(want) {
+		t.Fatalf("buckets = %+v, want %d non-empty buckets", cal.Buckets, len(want))
+	}
+	for i, w := range want {
+		b := cal.Buckets[i]
+		if b.Label != w.label || b.Low != w.low || b.High != w.high {
+			t.Errorf("bucket %d = %q [%v,%v), want %q [%v,%v)", i, b.Label, b.Low, b.High, w.label, w.low, w.high)
+		}
+		if b.N != w.n || b.Wins != w.wins {
+			t.Errorf("bucket %q n/wins = %d/%d, want %d/%d", b.Label, b.N, b.Wins, w.n, w.wins)
+		}
+		if mid := b.Midpoint(i); math.Abs(mid-w.midpoint) > 1e-9 {
+			t.Errorf("bucket %q midpoint = %v, want %v", b.Label, mid, w.midpoint)
+		}
+		if rate := float64(b.Wins) / float64(b.N); rate != w.winRate {
+			t.Errorf("bucket %q win rate = %v, want %v", b.Label, rate, w.winRate)
+		}
+	}
+	if cal.Excluded != 1 {
+		t.Errorf("Excluded = %d, want the single closed attempt with no score", cal.Excluded)
+	}
+	if cal.Scored() != 7 {
+		t.Errorf("Scored = %d, want 7", cal.Scored())
+	}
+}
+
+func TestCalibrateSaturatesOutOfRangeConfidence(t *testing.T) {
+	cal := Calibrate([]Attempt{
+		{ID: 1, Outcome: Filled, Confidence: confidence(-0.4)},
+		{ID: 2, Outcome: Venue, Confidence: confidence(1.7)},
+	})
+	if len(cal.Buckets) != 2 {
+		t.Fatalf("buckets = %+v, want the two edge bands", cal.Buckets)
+	}
+	if cal.Buckets[0].Label != "0.00–0.10" || cal.Buckets[1].Label != "0.90–1.00" {
+		t.Errorf("out-of-range scores landed in %q/%q, want the edge bands", cal.Buckets[0].Label, cal.Buckets[1].Label)
+	}
+}
+
+func TestCalibrateWithNoScoresIsEmpty(t *testing.T) {
+	for name, rows := range map[string][]Attempt{
+		"no rows":   nil,
+		"unscored":  {{ID: 1, Outcome: Filled}, {ID: 2, Outcome: Cap}},
+		"open only": {{ID: 3, Outcome: Outcome("pending"), Confidence: confidence(0.6)}},
+	} {
+		cal := Calibrate(rows)
+		if len(cal.Buckets) != 0 || cal.Scored() != 0 {
+			t.Errorf("%s: buckets = %+v, want none", name, cal.Buckets)
+		}
+	}
+	if cal := Calibrate([]Attempt{{ID: 1, Outcome: Filled}}); cal.Excluded != 1 {
+		t.Errorf("Excluded = %d, want the unscored closed attempt counted", cal.Excluded)
+	}
 }
