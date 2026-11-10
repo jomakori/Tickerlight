@@ -34,13 +34,23 @@ func main() {
 	source := ""
 	if *journalPath != "" {
 		loaded, err := journalread.Load(*journalPath)
-		if err != nil {
+		switch {
+		case errors.Is(err, journalread.ErrNotFound):
+			// The engine writes the journal on its first attempt, so a console
+			// that starts first must show "nothing yet", not crash and not the
+			// sample ledger.
+			log.Warn("journal not found yet", "path", *journalPath)
+			rows = nil
+			mode = "journal"
+			source = "attempt journal (no attempts recorded yet)"
+		case err != nil:
 			log.Error("read journal", "path", *journalPath, "err", err)
 			os.Exit(1)
+		default:
+			rows = loaded
+			mode = "journal"
+			source = "attempt journal"
 		}
-		rows = loaded
-		mode = "journal"
-		source = "attempt journal"
 	}
 
 	handler := server.New(server.Options{Rows: rows, Log: log, Source: source})
