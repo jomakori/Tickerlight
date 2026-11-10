@@ -54,20 +54,35 @@ const (
 	outcomePending  = "pending"
 )
 
+// ErrNotFound and ErrUnreadable distinguish the two ways a configured
+// journal path can fail to produce data: the path does not exist, or it
+// exists but could not be read (permissions, a directory instead of a
+// file, an I/O error partway through). The caller surfaces this
+// distinction to the operator instead of silently falling back to the
+// sample ledger, which would show plausible trades that never happened.
+var (
+	ErrNotFound   = errors.New("journal not found")
+	ErrUnreadable = errors.New("journal unreadable")
+)
+
 // Load reads every attempt described by the journal at path, oldest first.
-// A missing file is reported as an error: an operator who passed --journal
-// must not be shown an empty console that looks like "no trades" when the
-// path is simply wrong.
+// A path that cannot be opened or read returns ErrNotFound or ErrUnreadable
+// (wrapped with the underlying error) rather than falling back to any other
+// data: the caller decides how to render that, but it must never be the
+// sample ledger.
 func Load(path string) ([]tickerdata.Attempt, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("journalread: open %s: %w", path, err)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%w: %s: %v", ErrNotFound, path, err)
+		}
+		return nil, fmt.Errorf("%w: %s: %v", ErrUnreadable, path, err)
 	}
 	defer f.Close()
 
 	records, malformed, err := Read(f)
 	if err != nil {
-		return nil, fmt.Errorf("journalread: read %s: %w", path, err)
+		return nil, fmt.Errorf("%w: %s: %v", ErrUnreadable, path, err)
 	}
 	_ = malformed // counted, not fatal: a torn tail is expected after a crash
 
