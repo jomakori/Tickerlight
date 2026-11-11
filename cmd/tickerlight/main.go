@@ -44,16 +44,16 @@ func envBool(key string, def bool) bool {
 	return b
 }
 
-func envFloat(key string, def float64) float64 {
+func envInt64(key string, def int64) int64 {
 	v, ok := os.LookupEnv(key)
 	if !ok {
 		return def
 	}
-	f, err := strconv.ParseFloat(v, 64)
+	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
 		return def
 	}
-	return f
+	return n
 }
 
 func main() {
@@ -68,7 +68,7 @@ func main() {
 	judgeEnabled := flag.Bool("judge-enabled", envBool("TICKERLIGHT_JUDGE_ENABLED", false), "enable the rule-based order judge scorer (POST /score) on its own loopback listener")
 	judgeAddr := flag.String("judge-addr", envOr("TICKERLIGHT_JUDGE_ADDR", "127.0.0.1:8091"), "listen address for the judge scorer; must be loopback unless -judge-allow-non-loopback is set")
 	judgeAllowNonLoopback := flag.Bool("judge-allow-non-loopback", envBool("TICKERLIGHT_JUDGE_ALLOW_NON_LOOPBACK", false), "allow the judge scorer to bind a non-loopback address (dangerous: exposes the scorer off-host)")
-	judgeNotionalCeiling := flag.Float64("judge-notional-ceiling", envFloat("TICKERLIGHT_JUDGE_NOTIONAL_CEILING", 5000), "per-order notional ceiling above which the judge score is penalised; <=0 disables the check")
+	judgeNotionalCeilingCents := flag.Int64("judge-notional-ceiling-cents", envInt64("TICKERLIGHT_JUDGE_NOTIONAL_CEILING_CENTS", 5000), "per-order notional ceiling in cents (minor units) above which the judge score is penalised; default 5000 = $50.00; <=0 disables the check")
 	judgeAllowlist := flag.String("judge-allowlist", envOr("TICKERLIGHT_JUDGE_ALLOWLIST", ""), "comma-separated symbol allowlist for the judge scorer; empty permits any symbol")
 	flag.Parse()
 
@@ -118,8 +118,8 @@ func main() {
 	var judgeSrv *http.Server
 	if *judgeEnabled {
 		judgeCfg := judge.Config{
-			NotionalCeiling: *judgeNotionalCeiling,
-			Allowlist:       judge.ParseAllowlist(*judgeAllowlist),
+			NotionalCeilingCents: *judgeNotionalCeilingCents,
+			Allowlist:            judge.ParseAllowlist(*judgeAllowlist),
 		}
 		if err := judge.ValidateBindAddr(*judgeAddr, *judgeAllowNonLoopback); err != nil {
 			log.Error("judge addr rejected", "err", err)
@@ -149,7 +149,7 @@ func main() {
 	}()
 
 	if judgeSrv != nil {
-		judgeCfg := judge.Config{NotionalCeiling: *judgeNotionalCeiling, Allowlist: judge.ParseAllowlist(*judgeAllowlist)}
+		judgeCfg := judge.Config{NotionalCeilingCents: *judgeNotionalCeilingCents, Allowlist: judge.ParseAllowlist(*judgeAllowlist)}
 		log.Info("tickerlight judge scorer", "addr", *judgeAddr, "config", judgeCfg.String())
 		go func() {
 			if err := judgeSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

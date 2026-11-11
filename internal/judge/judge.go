@@ -5,13 +5,13 @@
 // Rule table (first match wins; hard rejects are checked before the ceiling
 // penalty):
 //
-//	Rule                      Condition                          Score                                   Reason
-//	non-positive qty          qty <= 0                            0.0                                     "qty must be positive"
-//	non-positive notional     notional <= 0                       0.0                                     "notional must be positive"
-//	unknown side              side not "buy"/"sell" (ci)          0.0                                     "unknown side"
-//	symbol not allowlisted    allowlist set, symbol not in it     0.0                                     "symbol not in allowlist"
-//	notional over ceiling     notional > ceiling (>0)             max(0.05, 1 - 0.5*(notional/ceiling-1)) "notional exceeds per-order ceiling"
-//	within configured limits  otherwise                           1.0                                     "within configured limits"
+//	Rule                      Condition                                    Score                                                 Reason
+//	non-positive qty          qty <= 0                                       0.0                                                   "qty must be positive"
+//	non-positive notional     notional_cents <= 0                            0.0                                                   "notional must be positive"
+//	unknown side              side not "buy"/"sell" (ci)                     0.0                                                   "unknown side"
+//	symbol not allowlisted    allowlist set, symbol not in it                0.0                                                   "symbol not in allowlist"
+//	notional over ceiling     notional_cents > ceiling_cents (>0)            max(0.05, 1 - 0.5*(notional_cents/ceiling_cents-1))  "notional exceeds per-order ceiling"
+//	within configured limits  otherwise                                      1.0                                                   "within configured limits"
 package judge
 
 import (
@@ -20,9 +20,10 @@ import (
 )
 
 // Score boundary and penalty weights. Chosen so a 100% overshoot of the
-// per-order ceiling (double the allowed notional) halves the score, and the
-// penalty floors at 0.05 rather than 0 so a steep overshoot still reads as
-// "penalised" rather than indistinguishable from a hard reject.
+// per-order ceiling (double the allowed notional, in cents) halves the
+// score, and the penalty floors at 0.05 rather than 0 so a steep overshoot
+// still reads as "penalised" rather than indistinguishable from a hard
+// reject.
 const (
 	scoreReject          = 0.0
 	scoreMax             = 1.0
@@ -31,12 +32,13 @@ const (
 )
 
 // Config carries every threshold the scorer applies. Zero values are valid:
-// a zero NotionalCeiling disables the ceiling check (nothing to compare
-// against) and a nil/empty Allowlist disables the allowlist check.
+// a zero NotionalCeilingCents disables the ceiling check (nothing to
+// compare against) and a nil/empty Allowlist disables the allowlist check.
 type Config struct {
-	// NotionalCeiling is the per-order notional above which the score is
-	// penalised. <= 0 disables the check.
-	NotionalCeiling float64
+	// NotionalCeilingCents is the per-order notional, in integer minor
+	// units (cents), above which the score is penalised. <= 0 disables
+	// the check.
+	NotionalCeilingCents int64
 	// Allowlist is the set of symbols permitted to score above zero. Empty
 	// disables the check so every symbol is allowed.
 	Allowlist []string
@@ -60,11 +62,14 @@ func (c Config) allowed(symbol string) bool {
 
 // Order is the minimal shape the scorer needs. Fields beyond these are not
 // examined; the scorer does not reach a venue or hold any order state.
+// NotionalCents is the order notional in integer minor units (cents) — the
+// engine never sends float dollars here, to avoid float-precision drift on
+// the number that drives the ceiling check.
 type Order struct {
-	Symbol   string  `json:"symbol"`
-	Side     string  `json:"side"`
-	Qty      float64 `json:"qty"`
-	Notional float64 `json:"notional"`
+	Symbol        string  `json:"symbol"`
+	Side          string  `json:"side"`
+	Qty           float64 `json:"qty"`
+	NotionalCents int64   `json:"notional_cents"`
 }
 
 // Result is the scorer's verdict: a score in [0,1] and the single rule that
@@ -80,7 +85,7 @@ func Score(cfg Config, o Order) Result {
 	if o.Qty <= 0 {
 		return Result{Score: scoreReject, Reason: "qty must be positive"}
 	}
-	if o.Notional <= 0 {
+	if o.NotionalCents <= 0 {
 		return Result{Score: scoreReject, Reason: "notional must be positive"}
 	}
 	side := strings.ToLower(strings.TrimSpace(o.Side))
@@ -90,8 +95,8 @@ func Score(cfg Config, o Order) Result {
 	if !cfg.allowed(o.Symbol) {
 		return Result{Score: scoreReject, Reason: "symbol not in allowlist"}
 	}
-	if cfg.NotionalCeiling > 0 && o.Notional > cfg.NotionalCeiling {
-		over := (o.Notional - cfg.NotionalCeiling) / cfg.NotionalCeiling
+	if cfg.NotionalCeilingCents > 0 && o.NotionalCents > cfg.NotionalCeilingCents {
+		over := float64(o.NotionalCents-cfg.NotionalCeilingCents) / float64(cfg.NotionalCeilingCents)
 		score := scoreMax - ceilingPenaltyFactor*over
 		if score < ceilingPenaltyFloor {
 			score = ceilingPenaltyFloor
@@ -127,5 +132,5 @@ func (c Config) String() string {
 	if len(c.Allowlist) > 0 {
 		allow = strings.Join(c.Allowlist, ",")
 	}
-	return fmt.Sprintf("ceiling=%g allowlist=%s", c.NotionalCeiling, allow)
+	return fmt.Sprintf("ceiling_cents=%d allowlist=%s", c.NotionalCeilingCents, allow)
 }
