@@ -1,0 +1,84 @@
+package ui
+
+// Policy shows the engine's own policy: the caps it enforces, the headroom left
+// today, and the mode, judge threshold and alert sink this process can see.
+//
+// It is a reading, not a control surface. There is no button on this page that
+// arms, sizes, places, cancels or kills anything, and no form that posts.
+templ Policy(d PolicyData) {
+	<section class="grid" aria-label="Engine policy">
+		<div class="card c8">
+			<div class="row">
+				<h2>Engine caps</h2>
+				<span class="tx2">live · caps_status</span>
+			</div>
+			if d.Available {
+				<div class="gate-row">
+					<span class="lbl">Dispatched today</span>
+					<div class="base">
+						<span class="num n40">{ cents(d.Caps.SpentCents) }</span>
+						<span class="delta neu">{ cents(d.Caps.RemainingCents) } <span class="lbl" style="font-size:10px">headroom left</span></span>
+					</div>
+					@TicksMeter(d.UsedPct(), 48, "Daily cap utilisation", "100", Pct(d.UsedPct(), 0))
+					<div class="kv2">
+						<div><span class="lbl">Per-order cap</span><b class="mono">{ cents(d.Caps.PerOrderCents) }</b></div>
+						<div><span class="lbl">Daily cap</span><b class="mono">{ cents(d.Caps.DailyCents) }</b></div>
+						<div><span class="lbl">Dispatched today</span><b class="mono">{ cents(d.Caps.SpentCents) }</b></div>
+						<div><span class="lbl">Remaining headroom</span><b class="mono">{ cents(d.Caps.RemainingCents) }</b></div>
+					</div>
+				</div>
+			} else {
+				<div class="gate-row" data-state="unavailable">
+					<p class="tx2" style="margin:0">
+						Caps unavailable. The engine did not report them, so this panel shows none — a number
+						here would be a guess.
+					</p>
+					<p class="mono tx2" style="margin:0">{ reasonText(d.Reason) }</p>
+				</div>
+			}
+		</div>
+
+		<div class="card c4">
+			<h2>Mode and guards</h2>
+			<div class="gate-row">
+				<div class="row"><span class="tx2">Mode</span><b class="mono">{ reported(d.Mode) }</b></div>
+				<div class="row"><span class="tx2">Judge threshold</span><b class="mono">{ reported(d.Threshold) }</b></div>
+				<div class="row"><span class="tx2">Alert sink</span><b class="mono">{ reported(d.AlertSink) }</b></div>
+			</div>
+			<p class="gated-note">@Icon("lock", 14) Read-only: the console calls caps_status and nothing else.</p>
+		</div>
+
+		<div class="card c12">
+			<h2>Where these numbers come from</h2>
+			<p class="tx2" style="margin:0">
+				Caps and headroom are read live from the engine's <span class="mono">caps_status</span> tool over the
+				loopback MCP endpoint, with the console's own engine token. Mode, judge threshold and alert sink are
+				engine configuration rather than engine state — no read-only tool reports them — so the console shows
+				the value it can see under the engine's own environment keys, and “not reported” when it has none.
+				Absence here is not evidence that the engine is in paper mode or that alerts are off.
+			</p>
+		</div>
+	</section>
+}
+
+// reported renders a policy fact, or the honest empty state when this process
+// does not have it.
+func reported(v string) string {
+	if v == "" {
+		return "not reported"
+	}
+	return v
+}
+
+// cents renders engine cents as money.
+func cents(n int64) string {
+	return USD(float64(n) / 100)
+}
+
+// reasonText is the engine's failure, or a plain statement that it sent none.
+func reasonText(r string) string {
+	if r == "" {
+		return "no failure reported"
+	}
+	return r
+}

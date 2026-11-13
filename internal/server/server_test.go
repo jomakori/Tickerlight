@@ -17,7 +17,7 @@ import (
 )
 
 // The console is a read-only sample ledger. These tests pin the HTTP surface to
-// that promise: four HTML routes, one health probe, embedded static assets, and
+// that promise: five HTML routes, one health probe, embedded static assets, and
 // nothing that mutates or dispatches. Everything goes through the real handler,
 // so routing, method handling and headers are exercised as the binary serves
 // them.
@@ -59,7 +59,7 @@ var externalRef = regexp.MustCompile(`(?:src|href)="https?://[^"]+"`)
 
 func TestPagesAreHTMLSampleOnlyAndUncached(t *testing.T) {
 	h := fixture(t)
-	for _, path := range []string{"/", "/journal", "/calibration", "/risk"} {
+	for _, path := range []string{"/", "/journal", "/calibration", "/risk", "/policy"} {
 		t.Run(path, func(t *testing.T) {
 			res := get(t, h, path)
 			if res.status != http.StatusOK {
@@ -87,7 +87,7 @@ func TestPagesAreHTMLSampleOnlyAndUncached(t *testing.T) {
 
 func TestHTMXRequestsGetFragments(t *testing.T) {
 	h := fixture(t)
-	for _, path := range []string{"/", "/journal", "/calibration", "/risk"} {
+	for _, path := range []string{"/", "/journal", "/calibration", "/risk", "/policy"} {
 		res := fetch(t, h, http.MethodGet, path, map[string]string{"HX-Request": "true"})
 		if res.status != http.StatusOK {
 			t.Fatalf("%s = %d", path, res.status)
@@ -353,7 +353,7 @@ func TestHealthz(t *testing.T) {
 
 func TestEmptyLedgerStillRenders(t *testing.T) {
 	h := New(Options{Now: func() time.Time { return tickerdata.SampleNow }})
-	for _, path := range []string{"/", "/journal", "/calibration", "/risk"} {
+	for _, path := range []string{"/", "/journal", "/calibration", "/risk", "/policy"} {
 		res := get(t, h, path)
 		if res.status != http.StatusOK {
 			t.Errorf("%s over an empty ledger = %d", path, res.status)
@@ -402,6 +402,7 @@ func TestPagesDeclareSectionMarkers(t *testing.T) {
 		{"/journal", `aria-label="Journal"`, "journal"},
 		{"/calibration", `aria-label="Calibration"`, "calibration"},
 		{"/risk", `aria-label="Risk state"`, "risk"},
+		{"/policy", `aria-label="Engine policy"`, "policy"},
 	}
 	for _, c := range cases {
 		t.Run(c.path, func(t *testing.T) {
@@ -483,7 +484,7 @@ func TestMissingResources404(t *testing.T) {
 // handler without reaching a panel or an asset.
 func TestMethodGateRejectsWrites(t *testing.T) {
 	h := fixture(t)
-	paths := []string{"/", "/journal", "/calibration", "/risk", "/healthz", "/static/styles.css"}
+	paths := []string{"/", "/journal", "/calibration", "/risk", "/policy", "/healthz", "/static/styles.css"}
 	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
 		for _, path := range paths {
 			res := fetch(t, h, m, path, nil)

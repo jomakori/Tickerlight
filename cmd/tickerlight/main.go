@@ -1,5 +1,6 @@
 // Command tickerlight serves the read-only ops console over a local sample
-// ledger. It has no exchange client and no order path.
+// ledger. It reads the engine's spend caps over loopback; it has no exchange
+// client and no order path.
 package main
 
 import (
@@ -11,9 +12,11 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/engine"
 	"github.com/jomakori/tickerlight/internal/journalread"
 	"github.com/jomakori/tickerlight/internal/judge"
 	"github.com/jomakori/tickerlight/internal/server"
@@ -70,6 +73,12 @@ func main() {
 	judgeAllowNonLoopback := flag.Bool("judge-allow-non-loopback", envBool("TICKERLIGHT_JUDGE_ALLOW_NON_LOOPBACK", false), "allow the judge scorer to bind a non-loopback address (dangerous: exposes the scorer off-host)")
 	judgeNotionalCeilingCents := flag.Int64("judge-notional-ceiling-cents", envInt64("TICKERLIGHT_JUDGE_NOTIONAL_CEILING_CENTS", 5000), "per-order notional ceiling in cents (minor units) above which the judge score is penalised; default 5000 = $50.00; <=0 disables the check")
 	judgeAllowlist := flag.String("judge-allowlist", envOr("TICKERLIGHT_JUDGE_ALLOWLIST", ""), "comma-separated symbol allowlist for the judge scorer; empty permits any symbol")
+
+	// Policy panel: the console reads the engine's caps through caps_status on
+	// the engine's loopback MCP endpoint. The bearer token is never a flag —
+	// argv is visible in ps — it comes from the engine's own variable,
+	// TRADING_MCP_HTTP_TOKEN.
+	engineMCPURL := flag.String("engine-mcp-url", envOr("TICKERLIGHT_ENGINE_MCP_URL", "http://127.0.0.1:8090/mcp"), "engine MCP endpoint the Policy panel reads caps_status from; must be loopback")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -102,7 +111,24 @@ func main() {
 		}
 	}
 
-	handler := server.New(server.Options{Rows: rows, Log: log, Source: source})
+	// One outbound client for the whole console, bounded so a silent engine
+	// cannot hold a render open.
+	engineHTTP := &http.Client{Timeout: 5 * time.Second}
+	var capsSource func(context.Context) (engine.Caps, error)
+	if token := strings.TrimSpace(os.Getenv("TRADING_MCP_HTTP_TOKEN")); token != "" {
+		capsSource = (&engine.Client{URL: *engineMCPURL, Token: token, HTTP: engineHTTP}).Caps
+		log.Info("policy panel", "engine", *engineMCPURL)
+	} else {
+		log.Warn("policy panel: TRADING_MCP_HTTP_TOKEN is empty, caps will render unavailable", "engine", *engineMCPURL)
+	}
+
+	handler := server.New(server.Options{
+		Rows:   rows,
+		Log:    log,
+		Source: source,
+		Caps:   capsSource,
+		Policy: engine.DeclaredFromEnv(os.LookupEnv),
+	})
 	srv := &http.Server{
 		Addr:              *addr,
 		Handler:           handler,

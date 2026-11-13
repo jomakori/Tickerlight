@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/engine"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 )
 
@@ -21,6 +22,7 @@ const (
 	TabJournal     = "journal"
 	TabCalibration = "calibration"
 	TabRisk        = "risk"
+	TabPolicy      = "policy"
 )
 
 // Tabs is the nav order, shared by the sidebar and the bottom tab bar.
@@ -29,6 +31,7 @@ var Tabs = []struct{ Key, Label string }{
 	{TabJournal, "Journal"},
 	{TabCalibration, "Calibration"},
 	{TabRisk, "Risk state"},
+	{TabPolicy, "Policy"},
 }
 
 // View is everything a page or HTMX fragment needs to render.
@@ -49,6 +52,36 @@ type View struct {
 	// sample ledger. The header repeats it so a page showing real journal
 	// rows never claims to be sample data.
 	Source string
+	// Policy is the engine policy reading for the Policy tab. Its zero value
+	// renders the unavailable panel: no caps, and nothing inferred from their
+	// absence.
+	Policy PolicyData
+}
+
+// PolicyData is what the Policy tab renders: the engine's caps reading, when
+// the engine answered, plus the policy facts this process can see for itself.
+type PolicyData struct {
+	// Available reports whether Caps holds a reading from the engine. When it
+	// is false the panel shows the failure and no numbers at all.
+	Available bool
+	Caps      engine.Caps
+	// Reason is the engine's failure, shown verbatim under the unavailable
+	// panel.
+	Reason string
+	// Mode, Threshold and AlertSink are engine configuration this process can
+	// read from its own environment. Empty renders as "not reported".
+	Mode      string
+	Threshold string
+	AlertSink string
+}
+
+// UsedPct is the share of the daily cap already dispatched, for the meter. A
+// cap of zero or less has no utilisation to draw, so it reports none.
+func (d PolicyData) UsedPct() float64 {
+	if d.Caps.DailyCents <= 0 {
+		return 0
+	}
+	return float64(d.Caps.SpentCents) / float64(d.Caps.DailyCents)
 }
 
 // SourceLabel is the origin phrase used in the title and session panel.
