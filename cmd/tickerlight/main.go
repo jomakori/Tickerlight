@@ -127,7 +127,6 @@ func main() {
 		Log:    log,
 		Source: source,
 		Caps:   capsSource,
-		Policy: engine.DeclaredFromEnv(os.LookupEnv),
 	})
 	srv := &http.Server{
 		Addr:              *addr,

@@ -58,8 +58,11 @@ type View struct {
 	Policy PolicyData
 }
 
-// PolicyData is what the Policy tab renders: the engine's caps reading, when
-// the engine answered, plus the policy facts this process can see for itself.
+// PolicyData is what the Policy tab renders: the engine's caps_status reading,
+// when the engine answered. Every field it shows — money, mode, judge threshold
+// and alert-sink state — comes from that one response, so the panel has one
+// source of truth. The zero value renders the unavailable panel: no caps, and
+// nothing inferred from their absence.
 type PolicyData struct {
 	// Available reports whether Caps holds a reading from the engine. When it
 	// is false the panel shows the failure and no numbers at all.
@@ -68,11 +71,6 @@ type PolicyData struct {
 	// Reason is the engine's failure, shown verbatim under the unavailable
 	// panel.
 	Reason string
-	// Mode, Threshold and AlertSink are engine configuration this process can
-	// read from its own environment. Empty renders as "not reported".
-	Mode      string
-	Threshold string
-	AlertSink string
 }
 
 // UsedPct is the share of the daily cap already dispatched, for the meter. A

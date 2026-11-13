@@ -8,18 +8,20 @@ import (
 )
 
 // The Policy panel's job is to be honest under both answers from the engine.
+// Caps, mode, judge threshold and alert-sink state all arrive in one Caps value,
+// because they all come from one caps_status response.
 func TestPolicyPanelShowsCapsAndGuards(t *testing.T) {
 	html := render(t, Policy(PolicyData{
 		Available: true,
 		Caps: engine.Caps{
-			PerOrderCents:  5000,
-			DailyCents:     15000,
-			SpentCents:     1250,
-			RemainingCents: 13750,
+			PerOrderCents:    5000,
+			DailyCents:       15000,
+			SpentCents:       1250,
+			RemainingCents:   13750,
+			Mode:             "paper",
+			JudgeThreshold:   "0.55",
+			AlertsConfigured: "configured",
 		},
-		Mode:      "paper",
-		Threshold: "0.55",
-		AlertSink: "configured",
 	}))
 
 	for _, want := range []string{
@@ -39,6 +41,9 @@ func TestPolicyPanelShowsCapsAndGuards(t *testing.T) {
 	}
 	if strings.Contains(html, "Caps unavailable") {
 		t.Error("available panel rendered the unavailable state")
+	}
+	if n := strings.Count(html, `<b class="mono">not reported</b>`); n != 0 {
+		t.Errorf("not-reported guards = %d, want 0: the engine reported all three", n)
 	}
 }
 
@@ -61,6 +66,30 @@ func TestPolicyPanelUnavailableShowsNoNumbers(t *testing.T) {
 	// Mode, threshold and alert sink are unknown here, and say so.
 	if n := strings.Count(html, `<b class="mono">not reported</b>`); n != 3 {
 		t.Errorf("not-reported guards = %d, want 3", n)
+	}
+}
+
+// A panel whose engine answered but did not report the policy keys is not the
+// same as one whose engine is down: it still shows the caps it was given, and
+// only the three unknown rows say "not reported".
+func TestPolicyPanelShowsCapsAndUnreportedGuards(t *testing.T) {
+	html := render(t, Policy(PolicyData{
+		Available: true,
+		Caps:      engine.Caps{PerOrderCents: 5000, DailyCents: 15000, RemainingCents: 15000},
+	}))
+
+	for _, want := range []string{"$50.00", "$150.00", `aria-label="Engine policy"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("policy panel missing the reported %q", want)
+		}
+	}
+	if n := strings.Count(html, `<b class="mono">not reported</b>`); n != 3 {
+		t.Errorf("not-reported guards = %d, want 3 (mode, threshold, alert sink)", n)
+	}
+	for _, unwanted := range []string{"paper", "0.00", "not configured", "configured"} {
+		if strings.Contains(html, `<b class="mono">`+unwanted+`</b>`) {
+			t.Errorf("unreported guard rendered a value %q instead of not reported", unwanted)
+		}
 	}
 }
 
