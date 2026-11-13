@@ -2,12 +2,14 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/engine"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 	"github.com/jomakori/tickerlight/internal/ui"
 	"github.com/jomakori/tickerlight/internal/web"
@@ -25,10 +27,19 @@ type Options struct {
 	// Source names where Rows came from, so the header can say it. Empty
 	// means the built-in sample ledger.
 	Source string
+	// Caps reads the engine's spend caps through the engine's read-only
+	// caps_status tool. Nil renders the Policy panel's unavailable state: the
+	// console never substitutes a default cap for a missing engine.
+	Caps func(context.Context) (engine.Caps, error)
+	// Policy is the engine configuration this process can see for itself —
+	// mode, judge threshold and alert sink. Empty fields render as "not
+	// reported" rather than as an inferred value.
+	Policy engine.Declared
 }
 
-// New returns the console handler. It serves HTML and embedded static assets
-// only: there is no order path, no outbound HTTP client, and no mutating
+// New returns the console handler. It serves HTML and embedded static assets,
+// and makes exactly one kind of outbound call: the read-only caps_status tool on
+// the engine's loopback MCP endpoint. There is no order path and no mutating
 // endpoint.
 func New(opts Options) http.Handler {
 	if opts.Now == nil {
@@ -37,7 +48,7 @@ func New(opts Options) http.Handler {
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)
 	}
-	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log, source: opts.Source}
+	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log, source: opts.Source, caps: opts.Caps, policy: opts.Policy}
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServer(web.Static()))))
@@ -49,6 +60,7 @@ func New(opts Options) http.Handler {
 	mux.HandleFunc("GET /journal", s.page(ui.TabJournal))
 	mux.HandleFunc("GET /calibration", s.page(ui.TabCalibration))
 	mux.HandleFunc("GET /risk", s.page(ui.TabRisk))
+	mux.HandleFunc("GET /policy", s.page(ui.TabPolicy))
 	mux.HandleFunc("/", s.notFound)
 	return s.withLogging(mux)
 }
@@ -58,6 +70,8 @@ type server struct {
 	now    func() time.Time
 	log    *slog.Logger
 	source string
+	caps   func(context.Context) (engine.Caps, error)
+	policy engine.Declared
 }
 
 // page builds one view from the request and renders either the whole document
@@ -69,6 +83,9 @@ func (s *server) page(tab string) http.HandlerFunc {
 		v.Range = tickerdata.ParseRange(r.URL.Query().Get("range"))
 		v.Filter = parseFilter(r)
 		v.Source = s.source
+		if tab == ui.TabPolicy {
+			v.Policy = s.policyReading(r.Context())
+		}
 
 		detail := false
 		if tab == ui.TabJournal {
@@ -93,6 +110,35 @@ func (s *server) page(tab string) http.HandlerFunc {
 		}
 		s.render(w, r, v, detail)
 	}
+}
+
+// policyTimeout bounds the engine call: a wedged engine costs this panel three
+// seconds and then renders as unavailable, rather than hanging the page.
+const policyTimeout = 3 * time.Second
+
+// policyReading asks the engine for its caps and pairs them with the policy this
+// process can see for itself.
+//
+// Failure is a first-class state. When the engine is unreachable, rejects the
+// token, or answers something unparsable, the panel says so and shows no
+// numbers: a fabricated cap is worse than a blank one, because someone might
+// trade against it.
+func (s *server) policyReading(parent context.Context) ui.PolicyData {
+	d := ui.PolicyData{Mode: s.policy.Mode, Threshold: s.policy.JudgeThreshold, AlertSink: s.policy.AlertSink}
+	if s.caps == nil {
+		d.Reason = "no engine client is configured in this process"
+		return d
+	}
+	ctx, cancel := context.WithTimeout(parent, policyTimeout)
+	defer cancel()
+	caps, err := s.caps(ctx)
+	if err != nil {
+		d.Reason = err.Error()
+		return d
+	}
+	d.Available = true
+	d.Caps = caps
+	return d
 }
 
 func (s *server) render(w http.ResponseWriter, r *http.Request, v ui.View, detail bool) {

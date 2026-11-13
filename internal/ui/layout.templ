@@ -50,6 +50,8 @@ templ ViewShell(v View) {
 			@Calibration(v.Calibration())
 		} else if v.Tab == TabRisk {
 			@Risk(v.RiskState())
+		} else if v.Tab == TabPolicy {
+			@Policy(v.Policy)
 		} else {
 			@Overview(v.Overview())
 		}

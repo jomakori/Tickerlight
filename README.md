@@ -76,6 +76,15 @@ only looks confident. This is the part you can't get from a P&L chart.
 Rolling 24h exposure against daily and per-order caps, drawdown versus limit, cooldown, and every
 pre-trade check visible with the value it compared.
 
+### Live policy
+
+The Policy panel reads the engine's own numbers instead of restating the sample ledger's: caps and
+remaining headroom come from the engine's `caps_status` tool over the loopback MCP endpoint, and
+mode, judge threshold and alert-sink status come from the engine's own environment keys. It is
+read-only by construction — the console calls `caps_status` and nothing else, and has no surface
+that can arm, size, place, cancel or kill. When the engine does not answer, the panel says so and
+shows no numbers rather than a plausible zero.
+
 ### Deployment
 
 Go `net/http` and server-rendered templ, with HTMX swapping panels in place. No SPA, no client
@@ -113,6 +122,20 @@ go run ./cmd/tickerlight --journal /path/to/journal.jsonl
 The file is read-only to this binary and a torn final line (a crash mid-write) is skipped rather
 than failing the read. Without the flag the console serves the sample ledger exactly as before; a
 path that cannot be read is a startup error, never a silent fallback to sample trades.
+
+The Policy panel talks to the engine over its loopback MCP endpoint. Point it there and give it the
+engine's own read token:
+
+```sh
+TRADING_MCP_HTTP_TOKEN=… \
+TICKERLIGHT_ENGINE_MCP_URL=http://127.0.0.1:8090/mcp \
+go run ./cmd/tickerlight
+```
+
+`TRADING_MCP_MODE`, `TRADING_MCP_JUDGE_THRESHOLD` and `TRADING_ALERT_WEBHOOK_URL` are read, when
+present, for the mode, judge-threshold and alert-sink rows; a key this process does not have renders
+as `not reported`. With no token the caps render unavailable rather than defaulting to a cap, and the
+token is never taken from a flag because argv is visible in `ps`.
 
 ## Current status
 
