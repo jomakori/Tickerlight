@@ -27,14 +27,12 @@ type Options struct {
 	// Source names where Rows came from, so the header can say it. Empty
 	// means the built-in sample ledger.
 	Source string
-	// Caps reads the engine's spend caps through the engine's read-only
-	// caps_status tool. Nil renders the Policy panel's unavailable state: the
-	// console never substitutes a default cap for a missing engine.
+	// Caps reads the engine's spend caps and policy through the engine's
+	// read-only caps_status tool. Nil renders the Policy panel's unavailable
+	// state: the console never substitutes a default cap for a missing engine,
+	// and never falls back to its own environment for mode, judge threshold or
+	// alert-sink state.
 	Caps func(context.Context) (engine.Caps, error)
-	// Policy is the engine configuration this process can see for itself —
-	// mode, judge threshold and alert sink. Empty fields render as "not
-	// reported" rather than as an inferred value.
-	Policy engine.Declared
 }
 
 // New returns the console handler. It serves HTML and embedded static assets,
@@ -48,7 +46,7 @@ func New(opts Options) http.Handler {
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)
 	}
-	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log, source: opts.Source, caps: opts.Caps, policy: opts.Policy}
+	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log, source: opts.Source, caps: opts.Caps}
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServer(web.Static()))))
@@ -71,7 +69,6 @@ type server struct {
 	log    *slog.Logger
 	source string
 	caps   func(context.Context) (engine.Caps, error)
-	policy engine.Declared
 }
 
 // page builds one view from the request and renders either the whole document
@@ -116,15 +113,17 @@ func (s *server) page(tab string) http.HandlerFunc {
 // seconds and then renders as unavailable, rather than hanging the page.
 const policyTimeout = 3 * time.Second
 
-// policyReading asks the engine for its caps and pairs them with the policy this
-// process can see for itself.
+// policyReading asks the engine for its caps and the policy it reports running
+// under. Both come from the same caps_status response, so the panel has one
+// source of truth and never consults this process's own environment.
 //
 // Failure is a first-class state. When the engine is unreachable, rejects the
 // token, or answers something unparsable, the panel says so and shows no
-// numbers: a fabricated cap is worse than a blank one, because someone might
-// trade against it.
+// numbers — caps or policy: a fabricated cap is worse than a blank one, because
+// someone might trade against it, and an inferred mode is worse than none,
+// because someone might trust it.
 func (s *server) policyReading(parent context.Context) ui.PolicyData {
-	d := ui.PolicyData{Mode: s.policy.Mode, Threshold: s.policy.JudgeThreshold, AlertSink: s.policy.AlertSink}
+	var d ui.PolicyData
 	if s.caps == nil {
 		d.Reason = "no engine client is configured in this process"
 		return d

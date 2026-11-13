@@ -14,10 +14,11 @@ import (
 
 // The payloads below are what the real engine answers. capturedJSON is the
 // verbatim body of a tools/call caps_status response from trading-mcp with
-// TRADING_MCP_PER_ORDER_CAP_CENTS=5000 and TRADING_MCP_DAILY_CAP_CENTS=15000,
-// recorded from the binary so these tests pin the wire format the console will
-// actually meet, not one invented here.
-const capturedJSON = `{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"per_order_cap_cents=5000 daily_cap_cents=15000 daily_spent_cents=0 daily_remaining_cents=15000"}]}}`
+// TRADING_MCP_PER_ORDER_CAP_CENTS=5000, TRADING_MCP_DAILY_CAP_CENTS=15000, paper
+// mode, the default 0.5 judge floor and no alert sidecar, recorded from the
+// binary so these tests pin the wire format the console will actually meet, not
+// one invented here.
+const capturedJSON = `{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"per_order_cap_cents=5000 daily_cap_cents=15000 daily_spent_cents=0 daily_remaining_cents=15000 mode=paper judge_threshold=0.5 alerts_configured=false"}]}}`
 
 const capturedSSE = "event: message\ndata: " + capturedJSON + "\n\n"
 
@@ -73,7 +74,15 @@ func TestCapsReadsEnginePayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Caps: %v", err)
 	}
-	want := Caps{PerOrderCents: 5000, DailyCents: 15000, SpentCents: 0, RemainingCents: 15000}
+	want := Caps{
+		PerOrderCents:    5000,
+		DailyCents:       15000,
+		SpentCents:       0,
+		RemainingCents:   15000,
+		Mode:             "paper",
+		JudgeThreshold:   "0.5",
+		AlertsConfigured: "not configured",
+	}
 	if caps != want {
 		t.Errorf("Caps = %+v, want %+v", caps, want)
 	}
@@ -195,5 +204,76 @@ func TestParseCapsToleratesNewKeysAndSigns(t *testing.T) {
 	}
 	if caps.RemainingCents != -1000 {
 		t.Errorf("remaining = %d, want -1000: an over-cap day is negative, not clamped to zero", caps.RemainingCents)
+	}
+}
+
+// The engine's policy keys are read from the same line as the money keys. These
+// are the shapes trading-mcp actually renders: lowercase mode, shortest
+// round-trip decimal, and a JSON boolean.
+func TestParseCapsReadsEnginePolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		text string
+		want Caps
+	}{
+		{
+			name: "paper with alerts off",
+			text: "per_order_cap_cents=10000 daily_cap_cents=50000 daily_spent_cents=0 daily_remaining_cents=50000 mode=paper judge_threshold=0.5 alerts_configured=false",
+			want: Caps{PerOrderCents: 10000, DailyCents: 50000, RemainingCents: 50000, Mode: "paper", JudgeThreshold: "0.5", AlertsConfigured: "not configured"},
+		},
+		{
+			name: "live with alerts on",
+			text: "per_order_cap_cents=10000 daily_cap_cents=50000 daily_spent_cents=0 daily_remaining_cents=50000 mode=live judge_threshold=0.85 alerts_configured=true",
+			want: Caps{PerOrderCents: 10000, DailyCents: 50000, RemainingCents: 50000, Mode: "live", JudgeThreshold: "0.85", AlertsConfigured: "configured"},
+		},
+		{
+			name: "threshold of one and a long decimal",
+			text: "per_order_cap_cents=1 daily_cap_cents=2 daily_spent_cents=0 daily_remaining_cents=2 mode=live judge_threshold=0.123456789 alerts_configured=true",
+			want: Caps{PerOrderCents: 1, DailyCents: 2, RemainingCents: 2, Mode: "live", JudgeThreshold: "0.123456789", AlertsConfigured: "configured"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ParseCaps(tc.text)
+			if err != nil {
+				t.Fatalf("ParseCaps: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("Caps = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+// An engine that predates the policy keys, or one whose values the console
+// cannot use, must leave those fields empty. The four money keys are still a
+// reading and must survive, and a bad value blanks only its own row: the panel
+// shows the caps and says "not reported" for exactly what it could not read.
+func TestParseCapsLeavesUnreportedPolicyEmpty(t *testing.T) {
+	const money = "per_order_cap_cents=5000 daily_cap_cents=15000 daily_spent_cents=0 daily_remaining_cents=15000"
+	for _, tc := range []struct {
+		name                    string
+		text                    string
+		mode, threshold, alerts string
+	}{
+		{"absent", money, "", "", ""},
+		{"unrecognised values", money + " mode=production judge_threshold=1.5 alerts_configured=maybe", "", "", ""},
+		{"threshold not a number", money + " mode=paper judge_threshold=high alerts_configured=true", "paper", "", "configured"},
+		{"threshold above one", money + " mode=paper judge_threshold=1.5 alerts_configured=false", "paper", "", "not configured"},
+		{"threshold below zero", money + " mode=live judge_threshold=-0.2 alerts_configured=false", "live", "", "not configured"},
+		{"blank values", money + " mode= judge_threshold= alerts_configured=", "", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ParseCaps(tc.text)
+			if err != nil {
+				t.Fatalf("ParseCaps: %v", err)
+			}
+			if got.PerOrderCents != 5000 || got.DailyCents != 15000 || got.RemainingCents != 15000 {
+				t.Errorf("money = %+v, want the reported caps", got)
+			}
+			if got.Mode != tc.mode || got.JudgeThreshold != tc.threshold || got.AlertsConfigured != tc.alerts {
+				t.Errorf("policy = mode %q threshold %q alerts %q, want mode %q threshold %q alerts %q",
+					got.Mode, got.JudgeThreshold, got.AlertsConfigured, tc.mode, tc.threshold, tc.alerts)
+			}
+		})
 	}
 }

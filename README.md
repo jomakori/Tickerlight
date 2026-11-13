@@ -78,12 +78,13 @@ pre-trade check visible with the value it compared.
 
 ### Live policy
 
-The Policy panel reads the engine's own numbers instead of restating the sample ledger's: caps and
-remaining headroom come from the engine's `caps_status` tool over the loopback MCP endpoint, and
-mode, judge threshold and alert-sink status come from the engine's own environment keys. It is
+The Policy panel reads the engine's own numbers instead of restating the sample ledger's: caps, the
+remaining headroom, mode, judge threshold and alert-sink status all come from the engine's
+`caps_status` tool over the loopback MCP endpoint — one response, one source of truth. It is
 read-only by construction — the console calls `caps_status` and nothing else, and has no surface
 that can arm, size, place, cancel or kill. When the engine does not answer, the panel says so and
-shows no numbers rather than a plausible zero.
+shows no numbers rather than a plausible zero; a field the engine does not report renders as
+`not reported` rather than as a default.
 
 ### Deployment
 
@@ -132,10 +133,14 @@ TICKERLIGHT_ENGINE_MCP_URL=http://127.0.0.1:8090/mcp \
 go run ./cmd/tickerlight
 ```
 
-`TRADING_MCP_MODE`, `TRADING_MCP_JUDGE_THRESHOLD` and `TRADING_ALERT_WEBHOOK_URL` are read, when
-present, for the mode, judge-threshold and alert-sink rows; a key this process does not have renders
-as `not reported`. With no token the caps render unavailable rather than defaulting to a cap, and the
-token is never taken from a flag because argv is visible in `ps`.
+`caps_status` returns the four money keys and then the policy the engine is actually running under —
+`mode`, `judge_threshold` and `alerts_configured` — and the panel renders all seven as it finds them.
+The console reads no policy from its own environment: the trading chart deliberately gives this
+container no engine values, so an env fallback would render every in-cluster policy row as not
+reported. A key the engine omits, or a value it sends in a shape the console cannot read, renders as
+`not reported`; that is not the same as paper mode, a zero threshold or alerts being off, and the
+panel never guesses. With no token the caps render unavailable rather than defaulting to a cap, and
+the token is never taken from a flag because argv is visible in `ps`.
 
 ## Current status
 

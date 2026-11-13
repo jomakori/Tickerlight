@@ -10,7 +10,8 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 // Policy shows the engine's own policy: the caps it enforces, the headroom left
-// today, and the mode, judge threshold and alert sink this process can see.
+// today, and the mode, judge threshold and alert-sink state it reports running
+// under. All of it comes from one caps_status response.
 //
 // It is a reading, not a control surface. There is no button on this page that
 // arms, sizes, places, cancels or kills anything, and no form that posts.
@@ -43,7 +44,7 @@ func Policy(d PolicyData) templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(cents(d.Caps.SpentCents))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 19, Col: 54}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 20, Col: 54}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 			if templ_7745c5c3_Err != nil {
@@ -56,7 +57,7 @@ func Policy(d PolicyData) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(cents(d.Caps.RemainingCents))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 20, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 21, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -77,7 +78,7 @@ func Policy(d PolicyData) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(cents(d.Caps.PerOrderCents))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 24, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 25, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -90,7 +91,7 @@ func Policy(d PolicyData) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(cents(d.Caps.DailyCents))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 25, Col: 87}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 26, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -103,7 +104,7 @@ func Policy(d PolicyData) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(cents(d.Caps.SpentCents))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 26, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 27, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -116,7 +117,7 @@ func Policy(d PolicyData) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(cents(d.Caps.RemainingCents))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 27, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 28, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -134,7 +135,7 @@ func Policy(d PolicyData) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(reasonText(d.Reason))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 36, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 37, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -150,9 +151,9 @@ func Policy(d PolicyData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var9 string
-		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(reported(d.Mode))
+		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(reported(d.Caps.Mode))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 44, Col: 84}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 45, Col: 89}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -163,9 +164,9 @@ func Policy(d PolicyData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var10 string
-		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(reported(d.Threshold))
+		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(reported(d.Caps.JudgeThreshold))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 45, Col: 100}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 46, Col: 110}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -176,9 +177,9 @@ func Policy(d PolicyData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var11 string
-		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(reported(d.AlertSink))
+		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(reported(d.Caps.AlertsConfigured))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 46, Col: 95}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/policy.templ`, Line: 47, Col: 107}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -192,7 +193,7 @@ func Policy(d PolicyData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " Read-only: the console calls caps_status and nothing else.</p></div><div class=\"card c12\"><h2>Where these numbers come from</h2><p class=\"tx2\" style=\"margin:0\">Caps and headroom are read live from the engine's <span class=\"mono\">caps_status</span> tool over the loopback MCP endpoint, with the console's own engine token. Mode, judge threshold and alert sink are engine configuration rather than engine state — no read-only tool reports them — so the console shows the value it can see under the engine's own environment keys, and “not reported” when it has none. Absence here is not evidence that the engine is in paper mode or that alerts are off.</p></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " Read-only: the console calls caps_status and nothing else.</p></div><div class=\"card c12\"><h2>Where these numbers come from</h2><p class=\"tx2\" style=\"margin:0\">Everything on this page — caps, headroom, mode, judge threshold and alert-sink state — is read live from the engine's <span class=\"mono\">caps_status</span> tool over the loopback MCP endpoint, with the console's own engine token. The engine reports what it is actually running, so the panel has one source of truth and never infers a mode, a threshold or an alert state from the console's own environment. A field the engine does not send renders as “not reported”; absence is not evidence that the engine is in paper mode or that alerts are off.</p></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

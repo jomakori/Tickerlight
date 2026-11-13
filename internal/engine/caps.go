@@ -19,13 +19,25 @@ import (
 )
 
 // Caps is the engine's spend limits for the current day, in cents as the
-// engine reports them. Nothing in this package supplies a default: a Caps value
-// only ever comes from a successful caps_status call.
+// engine reports them, plus the policy the engine says it is running under.
+// Nothing in this package supplies a default: a Caps value only ever comes
+// from a successful caps_status call, and a policy field is empty when the
+// engine did not report it.
 type Caps struct {
 	PerOrderCents  int64
 	DailyCents     int64
 	SpentCents     int64
 	RemainingCents int64
+	// Mode is the mode the engine reports it is running in: "paper" or
+	// "live". Empty when the engine did not report one.
+	Mode string
+	// JudgeThreshold is the engine's own rendering of the judge score floor,
+	// e.g. "0.5". Empty when the engine did not report one.
+	JudgeThreshold string
+	// AlertsConfigured is "configured" when the engine says its alert
+	// sidecar started, "not configured" when it says it did not, and empty
+	// when it said nothing either way.
+	AlertsConfigured string
 }
 
 // Client talks JSON-RPC to the engine's MCP endpoint over the loopback
@@ -120,28 +132,29 @@ func (c *Client) Caps(ctx context.Context) (Caps, error) {
 
 // ParseCaps reads the caps_status text payload:
 //
-//	per_order_cap_cents=5000 daily_cap_cents=15000 daily_spent_cents=0 daily_remaining_cents=15000
+//	per_order_cap_cents=5000 daily_cap_cents=15000 daily_spent_cents=0 daily_remaining_cents=15000 mode=paper judge_threshold=0.5 alerts_configured=false
 //
-// All four keys are required. A payload missing one, or carrying a value that
-// is not an integer, is an error rather than a partial Caps with zeros in it —
-// a zero cap and an unknown cap look nothing alike on screen, and only one of
-// them is true.
+// The four money keys are required. A payload missing one, or carrying a value
+// that is not an integer, is an error rather than a partial Caps with zeros in
+// it — a zero cap and an unknown cap look nothing alike on screen, and only one
+// of them is true.
+//
+// The policy keys are optional, because an engine that predates them is still a
+// working engine: absent, unrecognised or out-of-range values leave the field
+// empty so the panel renders "not reported". Absence is never read as paper
+// mode, a zero threshold or alerts being off.
 func ParseCaps(text string) (Caps, error) {
 	fields := strings.Fields(text)
 	if len(fields) == 0 {
 		return Caps{}, errors.New("caps_status: empty payload")
 	}
-	vals := make(map[string]int64, len(fields))
+	vals := make(map[string]string, len(fields))
 	for _, f := range fields {
 		k, v, ok := strings.Cut(f, "=")
 		if !ok || k == "" {
 			return Caps{}, fmt.Errorf("caps_status: malformed field %q", f)
 		}
-		n, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return Caps{}, fmt.Errorf("caps_status: %s is not an integer: %q", k, v)
-		}
-		vals[k] = n
+		vals[k] = v
 	}
 
 	var c Caps
@@ -154,13 +167,55 @@ func ParseCaps(text string) (Caps, error) {
 		{"daily_spent_cents", &c.SpentCents},
 		{"daily_remaining_cents", &c.RemainingCents},
 	} {
-		n, ok := vals[need.key]
+		raw, ok := vals[need.key]
 		if !ok {
 			return Caps{}, fmt.Errorf("caps_status: payload is missing %s", need.key)
 		}
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return Caps{}, fmt.Errorf("caps_status: %s is not an integer: %q", need.key, raw)
+		}
 		*need.dst = n
 	}
+	c.Mode = parseMode(vals["mode"])
+	c.JudgeThreshold = parseThreshold(vals["judge_threshold"])
+	c.AlertsConfigured = parseAlerts(vals["alerts_configured"])
 	return c, nil
+}
+
+// parseMode returns the engine's mode when it named one it could be running,
+// and "" otherwise. The engine itself reports paper for anything that is not
+// exactly live; the console only echoes a mode it recognises.
+func parseMode(raw string) string {
+	switch m := strings.ToLower(strings.TrimSpace(raw)); m {
+	case "paper", "live":
+		return m
+	}
+	return ""
+}
+
+// parseThreshold returns the engine's judge floor as a decimal string, or ""
+// when the value is not a score between 0 and 1. The engine already sends the
+// shortest round-trip form, so this re-renders the same digits; anything outside
+// a probability range is not a threshold and is not shown.
+func parseThreshold(raw string) string {
+	f, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || f < 0 || f > 1 {
+		return ""
+	}
+	return strconv.FormatFloat(f, 'g', -1, 64)
+}
+
+// parseAlerts maps the engine's boolean onto the panel's words. "" means the
+// engine did not say, which is not the same as saying alerts are off.
+func parseAlerts(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true":
+		return "configured"
+	case "false":
+		return "not configured"
+	}
+	return ""
 }
 
 func (c *Client) http() *http.Client {

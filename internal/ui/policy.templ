@@ -1,7 +1,8 @@
 package ui
 
 // Policy shows the engine's own policy: the caps it enforces, the headroom left
-// today, and the mode, judge threshold and alert sink this process can see.
+// today, and the mode, judge threshold and alert-sink state it reports running
+// under. All of it comes from one caps_status response.
 //
 // It is a reading, not a control surface. There is no button on this page that
 // arms, sizes, places, cancels or kills anything, and no form that posts.
@@ -41,9 +42,9 @@ templ Policy(d PolicyData) {
 		<div class="card c4">
 			<h2>Mode and guards</h2>
 			<div class="gate-row">
-				<div class="row"><span class="tx2">Mode</span><b class="mono">{ reported(d.Mode) }</b></div>
-				<div class="row"><span class="tx2">Judge threshold</span><b class="mono">{ reported(d.Threshold) }</b></div>
-				<div class="row"><span class="tx2">Alert sink</span><b class="mono">{ reported(d.AlertSink) }</b></div>
+				<div class="row"><span class="tx2">Mode</span><b class="mono">{ reported(d.Caps.Mode) }</b></div>
+				<div class="row"><span class="tx2">Judge threshold</span><b class="mono">{ reported(d.Caps.JudgeThreshold) }</b></div>
+				<div class="row"><span class="tx2">Alert sink</span><b class="mono">{ reported(d.Caps.AlertsConfigured) }</b></div>
 			</div>
 			<p class="gated-note">@Icon("lock", 14) Read-only: the console calls caps_status and nothing else.</p>
 		</div>
@@ -51,11 +52,12 @@ templ Policy(d PolicyData) {
 		<div class="card c12">
 			<h2>Where these numbers come from</h2>
 			<p class="tx2" style="margin:0">
-				Caps and headroom are read live from the engine's <span class="mono">caps_status</span> tool over the
-				loopback MCP endpoint, with the console's own engine token. Mode, judge threshold and alert sink are
-				engine configuration rather than engine state — no read-only tool reports them — so the console shows
-				the value it can see under the engine's own environment keys, and “not reported” when it has none.
-				Absence here is not evidence that the engine is in paper mode or that alerts are off.
+				Everything on this page — caps, headroom, mode, judge threshold and alert-sink state — is read
+				live from the engine's <span class="mono">caps_status</span> tool over the loopback MCP endpoint,
+				with the console's own engine token. The engine reports what it is actually running, so the panel
+				has one source of truth and never infers a mode, a threshold or an alert state from the console's
+				own environment. A field the engine does not send renders as “not reported”; absence is not
+				evidence that the engine is in paper mode or that alerts are off.
 			</p>
 		</div>
 	</section>
