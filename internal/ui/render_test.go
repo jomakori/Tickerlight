@@ -10,6 +10,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"github.com/jomakori/tickerlight/internal/status"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 )
 
@@ -26,25 +27,62 @@ func testView() View {
 	return NewView(tickerdata.Sample(), tickerdata.SampleNow)
 }
 
-func TestLayoutIsFullDocumentWithPaperBanner(t *testing.T) {
-	html := render(t, Layout(testView()))
-
-	for _, want := range []string{
-		"<!doctype html>",
-		`lang="en"`,
-		"Sample data · paper only",
-		`href="/static/styles.css"`,
-		`src="/static/htmx.min.js"`,
+// The document must be complete and must carry the funding badge for whichever
+// ledger it renders: sample copy for the built-in ledger, paper vs live for a
+// journal whose engine said which it is.
+func TestLayoutIsFullDocumentWithFundingBadge(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		view    View
+		badge   string
+		line    string
+		dropped string
+	}{
+		{
+			name:  "sample ledger",
+			view:  testView(),
+			badge: "Sample data · paper only",
+			line:  "Sample data · no real funds",
+		},
+		{
+			name:    "journal, engine says paper",
+			view:    statusView(liveEngineWithMode(status.ModePaper)),
+			badge:   "Attempt journal · paper only",
+			line:    "Attempt journal · no real funds",
+			dropped: "live · real funds",
+		},
+		{
+			name:    "journal, engine says live",
+			view:    statusView(liveEngine()),
+			badge:   "Attempt journal · live · real funds",
+			line:    "Attempt journal · real funds",
+			dropped: "no real funds",
+		},
 	} {
-		if !strings.Contains(html, want) {
-			t.Errorf("layout missing %q", want)
-		}
-	}
+		t.Run(tc.name, func(t *testing.T) {
+			html := render(t, Layout(tc.view))
 
-	for _, href := range []string{`href="/"`, `href="/journal"`, `href="/calibration"`, `href="/risk"`} {
-		if !strings.Contains(html, href) {
-			t.Errorf("navigation missing %s", href)
-		}
+			for _, want := range []string{
+				"<!doctype html>",
+				`lang="en"`,
+				tc.badge,
+				tc.line,
+				`href="/static/styles.css"`,
+				`src="/static/htmx.min.js"`,
+			} {
+				if !strings.Contains(html, want) {
+					t.Errorf("layout missing %q", want)
+				}
+			}
+			if tc.dropped != "" && strings.Contains(html, tc.dropped) {
+				t.Errorf("layout claims %q, which the engine did not say", tc.dropped)
+			}
+			for _, href := range []string{`href="/"`, `href="/journal"`, `href="/calibration"`, `href="/risk"`} {
+				if !strings.Contains(html, href) {
+					t.Errorf("navigation missing %s", href)
+				}
+			}
+		})
 	}
 }
 

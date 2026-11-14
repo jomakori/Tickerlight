@@ -55,14 +55,18 @@ templ Overview(d OverviewData) {
 
 		<div class="card c4">
 			<h2>Caps · rolling 24h</h2>
+			{{ c := d.Caps() }}
 			<div class="gate-row">
-				<div class="row"><span class="tx2">Per-order cap</span><b>{ USD(d.Limits.PerOrder) }</b></div>
-				<div class="row"><span class="tx2">Daily cap</span><b>{ USD(d.Limits.Daily) }</b></div>
+				<div class="row"><span class="tx2">Per-order cap</span><b>{ USD(c.PerOrder) }</b></div>
+				<div class="row"><span class="tx2">Daily cap</span><b>{ USD(c.Daily) }</b></div>
+				if c.Engine {
+					<div class="row"><span class="tx2">Remaining today</span><b>{ USD(c.Remaining) }</b></div>
+				}
 				<div class="row">
 					<span class="tx2">Used</span>
-					<b class="nw">{ USD(d.Used) } <span class="nd">({ Pct(d.Used/d.Limits.Daily, 0) })</span></b>
+					<b class="nw">{ USD(c.Used) } <span class="nd">({ Pct(c.Util(), 0) })</span></b>
 				</div>
-				@TicksMeter(d.Used/d.Limits.Daily, 36, "Rolling 24h cap utilisation", "100", Pct(d.Used/d.Limits.Daily, 0))
+				@TicksMeter(c.Util(), 36, "Rolling 24h cap utilisation", "100", Pct(c.Util(), 0))
 				<p class="tx2" style="margin:0">Dispatched notional in the trailing 24h. Blocks are the gate doing its job, not an outage — <b>{ strconv.Itoa(d.Blocked) }</b> attempts were stopped in this range.</p>
 			</div>
 		</div>

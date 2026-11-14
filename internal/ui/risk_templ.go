@@ -113,7 +113,7 @@ func Risk(d RiskData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
-		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(USD(d.Limits.Daily))
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(USD(d.Caps().Daily))
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/risk.templ`, Line: 26, Col: 81}
 		}
@@ -126,7 +126,7 @@ func Risk(d RiskData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var7 string
-		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(USD(d.Limits.PerOrder))
+		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(USD(d.Caps().PerOrder))
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/risk.templ`, Line: 27, Col: 88}
 		}
@@ -435,15 +435,16 @@ func Risk(d RiskData) templ.Component {
 }
 
 func riskChecks(d RiskData) []Check {
-	withinDaily := d.Used <= d.Limits.Daily
+	caps := d.Caps()
+	withinDaily := d.Used <= caps.Daily
 	withinDD := d.Drawdown < d.Limits.Drawdown
 	return []Check{
-		{"rolling 24h within daily cap", USD(d.Used) + " of " + USD(d.Limits.Daily), withinDaily},
+		{"rolling 24h within daily cap", USD(d.Used) + " of " + USD(caps.Daily), withinDaily},
 		{"drawdown within limit", USD(d.Drawdown) + " of " + USD(d.Limits.Drawdown), withinDD},
 		{"judge score above threshold", Pct(d.MeanP, 0) + " ≥ " + Pct(d.Limits.JudgeMin, 0), d.MeanP >= d.Limits.JudgeMin},
 		{"calibration sample above floor", strconv.Itoa(d.CalN) + " ≥ " + strconv.Itoa(d.Limits.MinN), d.CalN >= d.Limits.MinN},
 		{"symbol allowlisted", strconv.Itoa(len(tickerdata.Symbols(d.Rows))) + " symbols", true},
-		{"arming flag set", boolWord(d.Armed), d.Armed},
+		{"arming flag set", boolWord(d.Armed()), d.Armed()},
 	}
 }
 

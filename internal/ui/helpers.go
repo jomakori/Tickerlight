@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jomakori/tickerlight/internal/engine"
+	"github.com/jomakori/tickerlight/internal/status"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 )
 
@@ -43,11 +44,11 @@ type View struct {
 	Now      time.Time
 	Limits   tickerdata.Limits
 	Selected *tickerdata.Attempt
-	// Armed and Kill are the session flags. Both are fixed off in this build:
-	// there is no order path, and the arm/kill controls are gated and inert, so
-	// reporting anything but "disarmed" would misdescribe the binary.
-	Armed bool
-	Kill  bool
+	// Status is the engine's own account of itself, read from the snapshot
+	// file beside its journal. Its zero value means no snapshot was read, and
+	// the console then keeps the wording and caps it shipped with: it does not
+	// guess a mode.
+	Status status.Snapshot
 	// Source names where the rows came from: empty means the built-in
 	// sample ledger. The header repeats it so a page showing real journal
 	// rows never claims to be sample data.
@@ -90,33 +91,132 @@ func (v View) SourceLabel() string {
 	return v.Source
 }
 
-// SourceBadge is the corner badge: the origin plus the standing paper-only
-// reminder.
+// SourceBadge is the corner badge: where the rows came from plus the funding
+// claim the engine's snapshot supports. With no snapshot — or a paper one — it
+// keeps the standing paper-only reminder; only a snapshot that says live is
+// allowed to say real funds. Sample mode never says either: it has no engine.
 func (v View) SourceBadge() string {
 	if v.Source == "" {
 		return "Sample data · paper only"
 	}
-	return "Attempt journal · paper only"
+	return "Attempt journal · " + v.Funding()
 }
 
-// SourceLine is the session-panel sentence: the origin plus the standing
-// reminder that nothing here spends real money.
+// SourceLine is the session-panel sentence: the origin plus what the engine says
+// it is spending. Without a snapshot this is the same "no real funds" line the
+// console has always shown.
 func (v View) SourceLine() string {
-	switch v.SourceLabel() {
-	case "sample data":
+	if v.Source == "" {
 		return "Sample data · no real funds"
-	default:
-		return "Attempt journal · no real funds"
+	}
+	return "Attempt journal · " + v.FundingNote()
+}
+
+// snapshot is the engine reading this view is allowed to trust: none at all
+// when the rows are the built-in sample ledger. Sample mode has no engine, so
+// it renders sample-data copy and sample caps no matter what a caller put in
+// Status.
+func (v View) snapshot() status.Snapshot {
+	if v.Source == "" {
+		return status.Snapshot{}
+	}
+	return v.Status
+}
+
+// Live reports whether the engine's snapshot says it is trading real funds.
+// Only a snapshot that named the live mode counts; silence is not liveness.
+func (v View) Live() bool { return v.snapshot().Live() }
+
+// Funding is the money phrase the corner badge and the document title carry.
+func (v View) Funding() string {
+	if v.Live() {
+		return "live · real funds"
+	}
+	return "paper only"
+}
+
+// FundingNote is the session-panel phrasing of the same claim.
+func (v View) FundingNote() string {
+	if v.Live() {
+		return "real funds"
+	}
+	return "no real funds"
+}
+
+// AccountLabel names the account the session panel is looking at.
+func (v View) AccountLabel() string {
+	if v.Live() {
+		return "Live account"
+	}
+	return "Paper account"
+}
+
+// Armed is the engine's arming flag. With no snapshot the console has no engine
+// to read, so it reports disarmed rather than implying a live session.
+func (v View) Armed() bool { return v.snapshot().Armed }
+
+// Kill is the engine's kill-switch flag. With no snapshot it reports released.
+func (v View) Kill() bool { return v.snapshot().Kill }
+
+// CapsView is the set of cap numbers the shell chip and the Overview caps card
+// draw. Engine is true when they came from the engine's snapshot; false means
+// they are the sample limits this console has always shown, so an install with
+// no snapshot renders byte-for-byte what it rendered before.
+type CapsView struct {
+	Engine    bool
+	PerOrder  float64
+	Daily     float64
+	Remaining float64
+	Used      float64
+}
+
+// Util is the share of the daily cap consumed. A cap of zero or less has no
+// utilisation to draw.
+func (c CapsView) Util() float64 {
+	if c.Daily <= 0 {
+		return 0
+	}
+	return c.Used / c.Daily
+}
+
+// ChipDen is the chip's second line: the daily cap, plus the headroom the
+// engine reported when there is one.
+func (c CapsView) ChipDen() string {
+	if c.Engine {
+		return "of " + USD(c.Daily) + " · " + USD(c.Remaining) + " left"
+	}
+	return "of " + USD(c.Daily)
+}
+
+// dollars converts engine cents to the float the money formatters take.
+func dollars(n int64) float64 { return float64(n) / 100 }
+
+// Caps resolves the cap numbers once, so the chip and the caps card can never
+// disagree about which caps are in force.
+func (v View) Caps() CapsView {
+	if snap := v.snapshot(); snap.Available {
+		daily := dollars(snap.DailyCapCents)
+		remaining := dollars(snap.DailyRemainingCents)
+		return CapsView{
+			Engine:    true,
+			PerOrder:  dollars(snap.PerOrderCapCents),
+			Daily:     daily,
+			Remaining: remaining,
+			Used:      daily - remaining,
+		}
+	}
+	used := v.RollingUsed()
+	return CapsView{
+		PerOrder:  v.Limits.PerOrder,
+		Daily:     v.Limits.Daily,
+		Remaining: v.Limits.Daily - used,
+		Used:      used,
 	}
 }
 
 // ArmKillEnabled reports whether the arm/kill controls are wired to anything.
 // False in v1: the console renders them disabled and there is no handler.
 const ArmKillEnabled = false
-
-// ArmingFlag is the session arming state shown in the shell and session panel.
-// There is no order path, so it is always false and never persisted.
-func ArmingFlag() bool { return false }
 
 // NewView builds the default view over a ledger.
 func NewView(rows []tickerdata.Attempt, now time.Time) View {
@@ -127,8 +227,6 @@ func NewView(rows []tickerdata.Attempt, now time.Time) View {
 		Rows:   rows,
 		Now:    now,
 		Limits: tickerdata.DefaultLimits(),
-		Armed:  ArmingFlag(),
-		Kill:   false,
 	}
 }
 

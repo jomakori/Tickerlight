@@ -23,8 +23,8 @@ templ Risk(d RiskData) {
 				</div>
 				@TicksMeter(d.DailyPct, 48, "Daily cap utilisation", "100", Pct(d.DailyPct, 0))
 				<div class="kv2">
-					<div><span class="lbl">Daily cap</span><b class="mono">{ USD(d.Limits.Daily) }</b></div>
-					<div><span class="lbl">Per-order cap</span><b class="mono">{ USD(d.Limits.PerOrder) }</b></div>
+					<div><span class="lbl">Daily cap</span><b class="mono">{ USD(d.Caps().Daily) }</b></div>
+					<div><span class="lbl">Per-order cap</span><b class="mono">{ USD(d.Caps().PerOrder) }</b></div>
 					<div><span class="lbl">Drawdown limit</span><b class="mono">{ USD(d.Limits.Drawdown) }</b></div>
 					<div><span class="lbl">Judge threshold</span><b class="mono">{ Pct(d.Limits.JudgeMin, 0) }</b></div>
 				</div>
@@ -77,14 +77,15 @@ templ Risk(d RiskData) {
 }
 
 func riskChecks(d RiskData) []Check {
-	withinDaily := d.Used <= d.Limits.Daily
+	caps := d.Caps()
+	withinDaily := d.Used <= caps.Daily
 	withinDD := d.Drawdown < d.Limits.Drawdown
 	return []Check{
-		{"rolling 24h within daily cap", USD(d.Used) + " of " + USD(d.Limits.Daily), withinDaily},
+		{"rolling 24h within daily cap", USD(d.Used) + " of " + USD(caps.Daily), withinDaily},
 		{"drawdown within limit", USD(d.Drawdown) + " of " + USD(d.Limits.Drawdown), withinDD},
 		{"judge score above threshold", Pct(d.MeanP, 0) + " ≥ " + Pct(d.Limits.JudgeMin, 0), d.MeanP >= d.Limits.JudgeMin},
 		{"calibration sample above floor", strconv.Itoa(d.CalN) + " ≥ " + strconv.Itoa(d.Limits.MinN), d.CalN >= d.Limits.MinN},
 		{"symbol allowlisted", strconv.Itoa(len(tickerdata.Symbols(d.Rows))) + " symbols", true},
-		{"arming flag set", boolWord(d.Armed), d.Armed},
+		{"arming flag set", boolWord(d.Armed()), d.Armed()},
 	}
 }
