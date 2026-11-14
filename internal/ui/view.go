@@ -175,12 +175,13 @@ type RiskData struct {
 	VenueFail int
 }
 
-// RiskState prepares the Risk state panel.
+// RiskState prepares the Risk state panel. Its dispatched total and utilisation
+// follow the same Caps the shell chip draws: the engine's own spent/remaining
+// numbers when a snapshot was read, the journal's rolling notional otherwise.
 func (v View) RiskState() RiskData {
-	dailyPct := 0.0
-	if v.Limits.Daily > 0 {
-		dailyPct = v.RollingUsed() / v.Limits.Daily
-	}
+	caps := v.Caps()
+	dailyPct := caps.Util()
+	used := caps.Used
 	var kills, blocks, venueFail int
 	eq, peak, dd, lastFill := 0.0, 0.0, 0.0, "—"
 	var pSum float64
@@ -217,7 +218,7 @@ func (v View) RiskState() RiskData {
 	calN := tickerdata.Calibrate(v.Rows).Scored()
 	return RiskData{
 		View:      v,
-		Used:      v.RollingUsed(),
+		Used:      used,
 		DailyPct:  dailyPct,
 		Drawdown:  dd,
 		MeanP:     meanP,

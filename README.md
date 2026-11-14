@@ -124,6 +124,25 @@ The file is read-only to this binary and a torn final line (a crash mid-write) i
 than failing the read. Without the flag the console serves the sample ledger exactly as before; a
 path that cannot be read is a startup error, never a silent fallback to sample trades.
 
+Beside the journal the console also reads the engine's status snapshot — `status.json` in the same
+directory, or `--status` to point elsewhere:
+
+```sh
+go run ./cmd/tickerlight --journal /path/to/journal.jsonl --status /path/to/status.json
+```
+
+The snapshot is how the console stops guessing which engine it is drawing. It carries
+`mode` (`live` or `paper`), `armed`, `kill`, `per_order_cap_cents`, `daily_cap_cents`,
+`daily_spent_cents`, `daily_remaining_cents`, `judge_threshold` and `updated_at`. The corner badge,
+the session line, both session chips and the caps chip and card then render what the snapshot
+reports: `live` says real funds, `paper` says no real funds, arming and kill switch follow their
+flags, and the caps come from the engine's own cents.
+
+A snapshot that is missing, unreadable or malformed is not fatal and never a 500. The console
+falls back to exactly what it rendered before the file existed — paper-only wording and the sample
+caps — because the safe failure is to under-claim real funds, never to invent them. Sample mode
+(no `--journal`) has no engine, so it keeps its sample-data copy and sample caps regardless.
+
 The Policy panel talks to the engine over its loopback MCP endpoint. Point it there and give it the
 engine's own read token:
 
@@ -144,10 +163,12 @@ the token is never taken from a flag because argv is visible in `ps`.
 
 ## Current status
 
-Tickerlight currently runs on a **local sample ledger**, or on a journal file written by the
-paper-only trading server (`--journal`); either way the outcomes it shows are paper trades. There is
-no live broker, market-data feed, or model provider connected, and the binary has no order path. The
-console is read-only; arming and kill-switch controls render disabled and are inert server-side.
+Tickerlight runs on a **local sample ledger**, or on a journal file written by the trading server
+(`--journal`). Sample mode shows paper trades; a journal mode shows whatever the engine's status
+snapshot reports, so a `live` engine is labelled as trading real funds instead of paper. There is
+no live broker, market-data feed, or model provider connected to this binary, and it has no order
+path. The console is read-only; arming and kill-switch controls render disabled and are inert
+server-side, and the chips report the engine's flags rather than changing them.
 
 That's deliberate: the review surfaces are the product, and they're validated against a fixed
 ledger so the numbers are reproducible before any live wiring exists.

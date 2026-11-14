@@ -7,10 +7,12 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -20,8 +22,39 @@ import (
 	"github.com/jomakori/tickerlight/internal/journalread"
 	"github.com/jomakori/tickerlight/internal/judge"
 	"github.com/jomakori/tickerlight/internal/server"
+	"github.com/jomakori/tickerlight/internal/status"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 )
+
+// statusPathFor resolves where the engine's status snapshot lives: the -status
+// the caller gave, otherwise status.json beside the journal it belongs to.
+// Sample mode has no journal, so it has no snapshot to read.
+func statusPathFor(journal, explicit string) string {
+	if journal == "" {
+		return ""
+	}
+	if explicit != "" {
+		return explicit
+	}
+	return filepath.Join(filepath.Dir(journal), "status.json")
+}
+
+// loadStatus reads the snapshot and keeps the console's built-in wording when it
+// cannot. A missing file is normal — the engine may not have written one yet —
+// and a corrupt one must neither take the console down nor be believed.
+func loadStatus(path string, log *slog.Logger) status.Snapshot {
+	snap, err := status.Load(path)
+	switch {
+	case err == nil:
+		log.Info("engine status", "path", path, "mode", snap.Mode, "armed", snap.Armed, "kill", snap.Kill)
+		return snap
+	case errors.Is(err, fs.ErrNotExist):
+		log.Warn("status snapshot not found; rendering without engine state", "path", path)
+	default:
+		log.Warn("status snapshot unusable; rendering without engine state", "path", path, "err", err)
+	}
+	return status.Snapshot{}
+}
 
 // envOr, envBool and envFloat let every judge flag be set by environment
 // variable too (TICKERLIGHT_JUDGE_*), matching the console's existing
@@ -62,6 +95,7 @@ func envInt64(key string, def int64) int64 {
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
 	journalPath := flag.String("journal", "", "trading-mcp attempt journal (JSONL) to render; empty serves the built-in sample ledger")
+	statusPath := flag.String("status", "", "engine status snapshot (JSON) to render mode, arming, kill switch and caps from; default: status.json beside the journal")
 
 	// Judge scorer: off by default, loopback-only by default. It is never
 	// mounted on the public console mux (server.New) — it is its own
@@ -111,6 +145,19 @@ func main() {
 		}
 	}
 
+	// The status snapshot is the engine's own account of itself, and it is read
+	// only alongside a journal: sample mode has no engine and keeps its
+	// sample-data copy. A snapshot that is missing or unusable is not fatal —
+	// the console then renders its built-in paper-only wording, which is the
+	// honest default when nothing on disk can be vouched for.
+	snap := status.Snapshot{}
+	switch {
+	case *journalPath != "":
+		snap = loadStatus(statusPathFor(*journalPath, *statusPath), log)
+	case *statusPath != "":
+		log.Warn("status snapshot ignored: sample mode has no engine", "path", *statusPath)
+	}
+
 	// One outbound client for the whole console, bounded so a silent engine
 	// cannot hold a render open.
 	engineHTTP := &http.Client{Timeout: 5 * time.Second}
@@ -126,6 +173,7 @@ func main() {
 		Rows:   rows,
 		Log:    log,
 		Source: source,
+		Status: snap,
 		Caps:   capsSource,
 	})
 	srv := &http.Server{

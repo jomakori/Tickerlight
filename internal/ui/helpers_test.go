@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/status"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 )
 
@@ -239,11 +240,10 @@ func TestNewViewDefaults(t *testing.T) {
 	if v.Tab != TabOverview || v.Range != tickerdata.RangeAll {
 		t.Errorf("defaults = tab %q range %q", v.Tab, v.Range)
 	}
-	// Both session flags are fixed off in this build: there is no order path
-	// and the arm/kill controls are inert, so the console must report
-	// disarmed and released rather than implying a live, armed session.
-	if v.Armed || v.Kill {
-		t.Errorf("session flags = armed %v kill %v, want both false in the paper-only build", v.Armed, v.Kill)
+	// With no status snapshot the console has no engine to read, so it must
+	// report disarmed and released rather than implying a live, armed session.
+	if v.Armed() || v.Kill() {
+		t.Errorf("session flags = armed %v kill %v, want both false when no snapshot was read", v.Armed(), v.Kill())
 	}
 	if v.Limits.Daily <= 0 || v.Limits.PerOrder <= 0 || v.Limits.MinN <= 0 {
 		t.Errorf("limits not populated: %+v", v.Limits)
@@ -490,11 +490,12 @@ func TestRiskChecksReflectState(t *testing.T) {
 		t.Errorf("arming check = %+v, want a failing DISARMED line on the default view", checks[5])
 	}
 
-	// Arming is view state; the check must follow it, not hard-code FAIL.
+	// Arming is engine state; the check must follow it, not hard-code FAIL.
 	armed := NewView(tickerdata.Sample(), tickerdata.SampleNow)
-	armed.Armed = true
+	armed.Source = "attempt journal"
+	armed.Status = status.Snapshot{Available: true, Mode: status.ModePaper, Armed: true}
 	if c := riskChecks(armed.RiskState())[5]; !c.OK || !strings.Contains(c.Value, "ARMED") {
-		t.Errorf("arming check with Armed=true = %+v, want a passing ARMED line", c)
+		t.Errorf("arming check with the engine armed = %+v, want a passing ARMED line", c)
 	}
 
 	// A blown drawdown must flip its check.

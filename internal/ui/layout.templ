@@ -5,14 +5,16 @@ import (
 )
 
 // Layout renders the full document: shell, session panel, status chips, the
-// always-visible paper-only banner and the active panel.
+// funding badge and the active panel. The badge, the session line, both
+// session chips and the caps chip all follow the engine's status snapshot;
+// with no snapshot they keep the console's built-in paper-only wording.
 templ Layout(v View) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<title>Tickerlight · ops console ({ v.SourceLabel() }, paper only)</title>
+			<title>Tickerlight · ops console ({ v.SourceLabel() }, { v.Funding() })</title>
 			<link rel="stylesheet" href="/static/styles.css"/>
 			<script src="/static/htmx.min.js" defer></script>
 			<script src="/static/app.js" defer></script>
@@ -25,7 +27,7 @@ templ Layout(v View) {
 					<div class="sess" aria-label="Session">
 						<span class="lbl">Session</span>
 						<div>@armWord(14, v)</div>
-						<div class="tx2">Paper account<br/>{ v.SourceLine() }</div>
+						<div class="tx2">{ v.AccountLabel() }<br/>{ v.SourceLine() }</div>
 					</div>
 				</aside>
 				<div class="main">
@@ -86,23 +88,28 @@ templ chips(v View) {
 		<span class="lbl">Kill switch</span>
 		<b>@killStatus(15, v)</b>
 	</div>
+	{{ c := v.Caps() }}
 	<div class="chip-k">
 		<span class="lbl">Caps · 24h</span>
 		<b class="nw">
-			{ Pct(v.RollingUsed()/v.Limits.Daily, 0) }
-			<span class="den" style="font-size:13px">of { USD(v.Limits.Daily) }</span>
+			{ Pct(c.Util(), 0) }
+			<span class="den" style="font-size:13px">{ c.ChipDen() }</span>
 		</b>
+		if c.Engine {
+			<span class="tx2" style="font-size:10px">per-order { USD(c.PerOrder) }</span>
+		}
 	</div>
 }
 
-// armWord is the arming-flag wordmark. The flag is fixture state in this
-// build: nothing in the UI can change it, and the handlers never mutate it.
+// armWord is the arming-flag wordmark. The flag follows the engine's status
+// snapshot; with no snapshot — or a paper one — it reads DISARMED, because a
+// console with no engine to read must not imply an armed session.
 templ armWord(size int, v View) {
-	if v.Kill {
+	if v.Kill() {
 		<span class="gl" style={ wordStyle(size, "#FF5A5F") }>
 			@Icon("bang", size) HALTED
 		</span>
-	} else if v.Armed {
+	} else if v.Armed() {
 		<span class="gl" style={ wordStyle(size, "") }>
 			@Icon("dot", size) ARMED
 		</span>
@@ -113,8 +120,11 @@ templ armWord(size int, v View) {
 	}
 }
 
+// killStatus is the kill-switch wordmark, read from the engine's snapshot. With
+// no snapshot it reads RELEASED: absence of a kill signal is not evidence that
+// trading is halted, so the chip states the switch's own reported position.
 templ killStatus(size int, v View) {
-	if v.Kill {
+	if v.Kill() {
 		<span class="gl" style={ wordStyle(size, "#FF5A5F") }>
 			@Icon("bang", size) ENGAGED
 		</span>
