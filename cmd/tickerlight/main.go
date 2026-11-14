@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -41,17 +42,24 @@ func statusPathFor(journal, explicit string) string {
 
 // loadStatus reads the snapshot and keeps the console's built-in wording when it
 // cannot. A missing file is normal — the engine may not have written one yet —
-// and a corrupt one must neither take the console down nor be believed.
+// and a corrupt one must neither take the console down nor be believed. It runs
+// once per render, so each failure kind is warned about once per process:
+// repeating it per request would bury the line that matters.
+var reportedStatusFailure sync.Once
+
 func loadStatus(path string, log *slog.Logger) status.Snapshot {
 	snap, err := status.Load(path)
 	switch {
 	case err == nil:
-		log.Info("engine status", "path", path, "mode", snap.Mode, "armed", snap.Armed, "kill", snap.Kill)
 		return snap
 	case errors.Is(err, fs.ErrNotExist):
-		log.Warn("status snapshot not found; rendering without engine state", "path", path)
+		reportedStatusFailure.Do(func() {
+			log.Warn("status snapshot not found; rendering without engine state", "path", path)
+		})
 	default:
-		log.Warn("status snapshot unusable; rendering without engine state", "path", path, "err", err)
+		reportedStatusFailure.Do(func() {
+			log.Warn("status snapshot unusable; rendering without engine state", "path", path, "err", err)
+		})
 	}
 	return status.Snapshot{}
 }
@@ -150,10 +158,15 @@ func main() {
 	// sample-data copy. A snapshot that is missing or unusable is not fatal —
 	// the console then renders its built-in paper-only wording, which is the
 	// honest default when nothing on disk can be vouched for.
-	snap := status.Snapshot{}
+	var statusSource func() status.Snapshot
 	switch {
 	case *journalPath != "":
-		snap = loadStatus(statusPathFor(*journalPath, *statusPath), log)
+		// Read per request, not at startup: the console outlives an engine
+		// restart, and arming changes while the page is open. Reading the file
+		// once at boot pinned a live engine's page to "paper only" whenever the
+		// console came up first.
+		path := statusPathFor(*journalPath, *statusPath)
+		statusSource = func() status.Snapshot { return loadStatus(path, log) }
 	case *statusPath != "":
 		log.Warn("status snapshot ignored: sample mode has no engine", "path", *statusPath)
 	}
@@ -173,7 +186,7 @@ func main() {
 		Rows:   rows,
 		Log:    log,
 		Source: source,
-		Status: snap,
+		Status: statusSource,
 		Caps:   capsSource,
 	})
 	srv := &http.Server{

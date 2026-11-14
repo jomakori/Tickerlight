@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -21,14 +22,16 @@ func TestHandlerRendersEngineStatus(t *testing.T) {
 		Now:    func() time.Time { return tickerdata.SampleNow },
 		Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Source: "attempt journal",
-		Status: status.Snapshot{
-			Available:           true,
-			Mode:                status.ModeLive,
-			Armed:               true,
-			PerOrderCapCents:    5000,
-			DailyCapCents:       15000,
-			DailySpentCents:     1250,
-			DailyRemainingCents: 13750,
+		Status: func() status.Snapshot {
+			return status.Snapshot{
+				Available:           true,
+				Mode:                status.ModeLive,
+				Armed:               true,
+				PerOrderCapCents:    5000,
+				DailyCapCents:       15000,
+				DailySpentCents:     1250,
+				DailyRemainingCents: 13750,
+			}
 		},
 	})
 
@@ -76,5 +79,44 @@ func TestHandlerWithoutStatusKeepsPaperCopy(t *testing.T) {
 		if strings.Contains(body, never) {
 			t.Errorf("fallback claims %q; no snapshot supports it", never)
 		}
+	}
+}
+
+// The console boots before the engine on a fresh pod, and arming changes while
+// a page is open. Reading the snapshot once at boot pinned production to
+// "paper only" until someone restarted the console, so the handler must read it
+// per render.
+func TestHandlerReReadsStatusPerRequest(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/status.json"
+	if err := os.WriteFile(path, []byte(`{"mode":"paper","armed":false,"per_order_cap_cents":10000}`), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h := New(Options{
+		Rows:   tickerdata.Sample(),
+		Now:    func() time.Time { return tickerdata.SampleNow },
+		Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Source: "attempt journal",
+		Status: func() status.Snapshot {
+			snap, err := status.Load(path)
+			if err != nil {
+				return status.Snapshot{}
+			}
+			return snap
+		},
+	})
+
+	if body := fetch(t, h, http.MethodGet, "/", nil).body; !strings.Contains(body, "no real funds") {
+		t.Fatalf("paper snapshot: missing paper copy")
+	}
+	if err := os.WriteFile(path, []byte(`{"mode":"live","armed":true,"per_order_cap_cents":5000,"daily_cap_cents":15000,"daily_remaining_cents":15000}`), 0o644); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	body := fetch(t, h, http.MethodGet, "/", nil).body
+	if !strings.Contains(body, "live · real funds") || strings.Contains(body, "no real funds") {
+		t.Fatalf("live snapshot written after boot still renders paper copy")
+	}
+	if !strings.Contains(body, "$50.00") {
+		t.Fatalf("live snapshot caps not rendered")
 	}
 }

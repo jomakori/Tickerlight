@@ -28,10 +28,12 @@ type Options struct {
 	// Source names where Rows came from, so the header can say it. Empty
 	// means the built-in sample ledger.
 	Source string
-	// Status is the engine's status snapshot, read by the caller from the file
-	// beside the journal. Its zero value means no snapshot: the console then
-	// renders its built-in paper-only wording rather than guessing a mode.
-	Status status.Snapshot
+	// Status reads the engine's status snapshot from the file beside the
+	// journal and is called once per render, so a page left open follows the
+	// engine's arming and caps instead of the state it booted with. Nil means
+	// no snapshot: the console then renders its built-in paper-only wording
+	// rather than guessing a mode.
+	Status func() status.Snapshot
 	// Caps reads the engine's spend caps and policy through the engine's
 	// read-only caps_status tool. Nil renders the Policy panel's unavailable
 	// state: the console never substitutes a default cap for a missing engine,
@@ -73,7 +75,7 @@ type server struct {
 	now    func() time.Time
 	log    *slog.Logger
 	source string
-	status status.Snapshot
+	status func() status.Snapshot
 	caps   func(context.Context) (engine.Caps, error)
 }
 
@@ -86,7 +88,9 @@ func (s *server) page(tab string) http.HandlerFunc {
 		v.Range = tickerdata.ParseRange(r.URL.Query().Get("range"))
 		v.Filter = parseFilter(r)
 		v.Source = s.source
-		v.Status = s.status
+		if s.status != nil {
+			v.Status = s.status()
+		}
 		if tab == ui.TabPolicy {
 			v.Policy = s.policyReading(r.Context())
 		}
