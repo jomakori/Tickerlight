@@ -135,7 +135,7 @@ func TestArmKillControlsAreDisabled(t *testing.T) {
 }
 
 // The console has exactly one form post, the arming window, and it exists only
-// on a policy page that was configured with an allowlist and reached through the
+// on a policy page that was configured with an admin URL and reached through the
 // Access gateway. Every other page and every other verb stays inert.
 func TestOnlyTheArmingFormPosts(t *testing.T) {
 	for _, tab := range []string{TabOverview, TabJournal, TabCalibration, TabRisk, TabDecisions, TabPolicy} {

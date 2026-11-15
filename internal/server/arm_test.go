@@ -37,7 +37,7 @@ func armConsole(t *testing.T, arm func(context.Context, armctl.Request) (armctl.
 		Rows: tickerdata.Sample(),
 		Now:  func() time.Time { return tickerdata.SampleNow },
 		Log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Arm:  &ArmOptions{AllowedEmails: []string{armEmail}, Arm: arm},
+		Arm:  &ArmOptions{Arm: arm},
 	})
 }
 
@@ -73,21 +73,21 @@ func TestArmRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("an identity off the allowlist is forbidden", func(t *testing.T) {
+	t.Run("an identity the gateway would not have written is forbidden", func(t *testing.T) {
 		called := false
 		srv := armConsole(t, func(ctx context.Context, req armctl.Request) (armctl.Result, error) {
 			called = true
 			return armctl.Result{}, nil
 		})
 		req := armPost("0123456789abcdef0123456789abcdef", url.Values{"confirm": {"on"}, "ttl_minutes": {"30"}})
-		req.Header.Set("x-cf-access-jwt-payload", identityHeader("someone@else.example"))
+		req.Header.Set("x-cf-access-jwt-payload", "not-base64-at-all")
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("status = %d, want 403 (body %q)", rec.Code, rec.Body.String())
 		}
 		if called {
-			t.Fatal("engine was called for an identity off the allowlist")
+			t.Fatal("engine was called for an unparseable identity")
 		}
 	})
 
@@ -208,7 +208,7 @@ func TestArmCardRenders(t *testing.T) {
 	stub, _ := stubMCP(t, capsPayload)
 	defer stub.Close()
 
-	// The card offers the form only when the request carries an allowed
+	// The card offers the form only when the request carries a
 	// identity and the engine's ceilings are known.
 	c := &engine.Client{URL: stub.URL, Token: "read-token", HTTP: stub.Client()}
 	srv := New(Options{
@@ -216,7 +216,7 @@ func TestArmCardRenders(t *testing.T) {
 		Now:  func() time.Time { return tickerdata.SampleNow },
 		Log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Caps: c.Caps,
-		Arm:  &ArmOptions{AllowedEmails: []string{armEmail}, Arm: func(context.Context, armctl.Request) (armctl.Result, error) { return armctl.Result{}, nil }},
+		Arm:  &ArmOptions{Arm: func(context.Context, armctl.Request) (armctl.Result, error) { return armctl.Result{}, nil }},
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/policy", nil)
