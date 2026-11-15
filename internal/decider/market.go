@@ -1,6 +1,11 @@
 package decider
 
-import "time"
+import (
+	"time"
+	// Embedded zone database: the console image is a bare alpine rootfs with no
+	// tzdata package, so LoadLocation would panic there.
+	_ "time/tzdata"
+)
 
 // nyLocation is loaded once; a missing tzdata database is a startup
 // error, not a silent UTC fallback, because market hours computed against
