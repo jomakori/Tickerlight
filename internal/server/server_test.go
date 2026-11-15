@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/decisionsread"
 	"github.com/jomakori/tickerlight/internal/journalread"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 	"github.com/jomakori/tickerlight/internal/web"
@@ -59,7 +60,7 @@ var externalRef = regexp.MustCompile(`(?:src|href)="https?://[^"]+"`)
 
 func TestPagesAreHTMLSampleOnlyAndUncached(t *testing.T) {
 	h := fixture(t)
-	for _, path := range []string{"/", "/journal", "/calibration", "/risk", "/policy"} {
+	for _, path := range []string{"/", "/journal", "/calibration", "/risk", "/policy", "/decisions"} {
 		t.Run(path, func(t *testing.T) {
 			res := get(t, h, path)
 			if res.status != http.StatusOK {
@@ -87,7 +88,7 @@ func TestPagesAreHTMLSampleOnlyAndUncached(t *testing.T) {
 
 func TestHTMXRequestsGetFragments(t *testing.T) {
 	h := fixture(t)
-	for _, path := range []string{"/", "/journal", "/calibration", "/risk", "/policy"} {
+	for _, path := range []string{"/", "/journal", "/calibration", "/risk", "/policy", "/decisions"} {
 		res := fetch(t, h, http.MethodGet, path, map[string]string{"HX-Request": "true"})
 		if res.status != http.StatusOK {
 			t.Fatalf("%s = %d", path, res.status)
@@ -106,7 +107,7 @@ func TestHTMXRequestsGetFragments(t *testing.T) {
 
 func TestNavigationIsCurrentPerPage(t *testing.T) {
 	h := fixture(t)
-	pages := map[string]string{"/": "/", "/journal": "/journal", "/calibration": "/calibration", "/risk": "/risk"}
+	pages := map[string]string{"/": "/", "/journal": "/journal", "/calibration": "/calibration", "/risk": "/risk", "/decisions": "/decisions"}
 	for path, href := range pages {
 		res := get(t, h, path)
 		if !strings.Contains(res.body, `href="`+href+`"`) {
@@ -353,7 +354,7 @@ func TestHealthz(t *testing.T) {
 
 func TestEmptyLedgerStillRenders(t *testing.T) {
 	h := New(Options{Now: func() time.Time { return tickerdata.SampleNow }})
-	for _, path := range []string{"/", "/journal", "/calibration", "/risk", "/policy"} {
+	for _, path := range []string{"/", "/journal", "/calibration", "/risk", "/policy", "/decisions"} {
 		res := get(t, h, path)
 		if res.status != http.StatusOK {
 			t.Errorf("%s over an empty ledger = %d", path, res.status)
@@ -403,6 +404,7 @@ func TestPagesDeclareSectionMarkers(t *testing.T) {
 		{"/calibration", `aria-label="Calibration"`, "calibration"},
 		{"/risk", `aria-label="Risk state"`, "risk"},
 		{"/policy", `aria-label="Engine policy"`, "policy"},
+		{"/decisions", `aria-label="Decisions"`, "decisions"},
 	}
 	for _, c := range cases {
 		t.Run(c.path, func(t *testing.T) {
@@ -431,7 +433,7 @@ func TestPagesDeclareSectionMarkers(t *testing.T) {
 func TestMissingResources404(t *testing.T) {
 	h := fixture(t)
 	for _, path := range []string{
-		"/nope", "/journal/", "/journal/extra", "/risk/extra",
+		"/nope", "/journal/", "/journal/extra", "/risk/extra", "/decisions/extra",
 		"/index.html", "/overview", "/api",
 	} {
 		t.Run(path, func(t *testing.T) {
@@ -484,7 +486,7 @@ func TestMissingResources404(t *testing.T) {
 // handler without reaching a panel or an asset.
 func TestMethodGateRejectsWrites(t *testing.T) {
 	h := fixture(t)
-	paths := []string{"/", "/journal", "/calibration", "/risk", "/policy", "/healthz", "/static/styles.css"}
+	paths := []string{"/", "/journal", "/calibration", "/risk", "/policy", "/decisions", "/healthz", "/static/styles.css"}
 	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
 		for _, path := range paths {
 			res := fetch(t, h, m, path, nil)
@@ -495,6 +497,75 @@ func TestMethodGateRejectsWrites(t *testing.T) {
 				t.Errorf("%s %s served the asset body", m, path)
 			}
 		}
+	}
+}
+
+// TestDecisionsPanelReadsPerRequest pins the seam the decider depends on: the
+// console asks for the journal on every render, so a decision written after the
+// process started shows up, and a read failure shows as unavailable rather than
+// as a quiet day.
+func TestDecisionsPanelReadsPerRequest(t *testing.T) {
+	reads := 0
+	unreadable := false
+	row := decisionsread.Entry{
+		Time:      tickerdata.SampleNow,
+		Symbol:    "SPY",
+		Jev:       &decisionsread.Jev{Model: "jev-1.14.0", Choice: "hold", Probabilities: map[string]float64{"hold": 0.86}, Score: 0.25, Noul: 0.64},
+		Gate:      decisionsread.Gate{Reason: "low_setup_score"},
+		LatencyMS: 96,
+	}
+	h := New(Options{
+		Rows: tickerdata.Sample(),
+		Now:  func() time.Time { return tickerdata.SampleNow },
+		Log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Decisions: func() DecisionsReading {
+			reads++
+			if unreadable {
+				return DecisionsReading{Note: "decisions journal unreadable: permission denied", Unavailable: true}
+			}
+			return DecisionsReading{Rows: []decisionsread.Entry{row}, Note: "decisions journal: /data/decisions.jsonl"}
+		},
+	})
+
+	res := get(t, h, "/decisions")
+	if res.status != http.StatusOK {
+		t.Fatalf("/decisions = %d, want 200", res.status)
+	}
+	for _, want := range []string{"SPY", "hold 86%", "low_setup_score", "decisions journal: /data/decisions.jsonl"} {
+		if !strings.Contains(res.body, want) {
+			t.Errorf("panel missing %q", want)
+		}
+	}
+	if reads != 1 {
+		t.Errorf("reads = %d, want 1", reads)
+	}
+	if again := get(t, h, "/decisions"); again.status != http.StatusOK || reads != 2 {
+		t.Errorf("second render: status %d, reads %d; want 200, 2", again.status, reads)
+	}
+
+	unreadable = true
+	res = get(t, h, "/decisions")
+	if !strings.Contains(res.body, "journal unavailable") || !strings.Contains(res.body, "permission denied") {
+		t.Error("unreadable journal does not render the unavailable state")
+	}
+	if strings.Contains(res.body, "SPY") {
+		t.Error("unreadable journal still shows rows")
+	}
+}
+
+// TestDecisionsPanelWithoutSource pins the case a console configured with no
+// journal hits: it must say so, not imply nothing was decided.
+func TestDecisionsPanelWithoutSource(t *testing.T) {
+	h := fixture(t)
+	res := get(t, h, "/decisions")
+	if res.status != http.StatusOK {
+		t.Fatalf("/decisions = %d, want 200", res.status)
+	}
+	if !strings.Contains(res.body, "journal unavailable") {
+		t.Error("no configured journal does not render the unavailable state")
+	}
+	if !strings.Contains(res.body, "no decisions journal is configured") {
+		t.Error("no configured journal does not explain itself")
 	}
 }
 

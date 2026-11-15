@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/decisionsread"
 	"github.com/jomakori/tickerlight/internal/engine"
 	"github.com/jomakori/tickerlight/internal/journalread"
 	"github.com/jomakori/tickerlight/internal/judge"
@@ -26,6 +27,37 @@ import (
 	"github.com/jomakori/tickerlight/internal/status"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
 )
+
+// decisionsPathFor locates the decider's journal: explicit wins, otherwise
+// decisions.jsonl beside the attempt journal, and sample mode has neither.
+func decisionsPathFor(journal, explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if journal == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(journal), "decisions.jsonl")
+}
+
+// loadDecisions reads the decisions journal for one render. A missing file is
+// normal before the decider's first tick; an unreadable one is shown as
+// unavailable rather than as an empty day.
+func loadDecisions(path string, log *slog.Logger) server.DecisionsReading {
+	entries, err := decisionsread.Load(path)
+	switch {
+	case errors.Is(err, decisionsread.ErrNotFound):
+		return server.DecisionsReading{Note: "decisions journal: " + path + " (no decisions yet)"}
+	case err != nil:
+		log.Error("read decisions", "path", path, "err", err)
+		return server.DecisionsReading{Note: err.Error(), Unavailable: true}
+	}
+	note := "decisions journal: " + path
+	if len(entries) == 0 {
+		note += " (no decisions yet)"
+	}
+	return server.DecisionsReading{Rows: entries, Note: note}
+}
 
 // statusPathFor resolves where the engine's status snapshot lives: the -status
 // the caller gave, otherwise status.json beside the journal it belongs to.
@@ -104,6 +136,7 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
 	journalPath := flag.String("journal", "", "trading-mcp attempt journal (JSONL) to render; empty serves the built-in sample ledger")
 	statusPath := flag.String("status", "", "engine status snapshot (JSON) to render mode, arming, kill switch and caps from; default: status.json beside the journal")
+	decisionsPath := flag.String("decisions", envOr("TICKERLIGHT_DECISIONS", ""), "decider decisions journal (JSONL) for the Decisions panel; default: decisions.jsonl beside the journal")
 
 	// Judge scorer: off by default, loopback-only by default. It is never
 	// mounted on the public console mux (server.New) — it is its own
@@ -182,12 +215,21 @@ func main() {
 		log.Warn("policy panel: TRADING_MCP_HTTP_TOKEN is empty, caps will render unavailable", "engine", *engineMCPURL)
 	}
 
+	// The decisions journal belongs to the decider, which writes it whether or
+	// not this console is up, so it is read per request like the status
+	// snapshot and never at boot.
+	var decisionsSource func() server.DecisionsReading
+	if path := decisionsPathFor(*journalPath, *decisionsPath); path != "" {
+		decisionsSource = func() server.DecisionsReading { return loadDecisions(path, log) }
+	}
+
 	handler := server.New(server.Options{
-		Rows:   rows,
-		Log:    log,
-		Source: source,
-		Status: statusSource,
-		Caps:   capsSource,
+		Rows:      rows,
+		Log:       log,
+		Source:    source,
+		Status:    statusSource,
+		Caps:      capsSource,
+		Decisions: decisionsSource,
 	})
 	srv := &http.Server{
 		Addr:              *addr,

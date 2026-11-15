@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/decisionsread"
 	"github.com/jomakori/tickerlight/internal/engine"
 	"github.com/jomakori/tickerlight/internal/status"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
@@ -24,6 +25,7 @@ const (
 	TabCalibration = "calibration"
 	TabRisk        = "risk"
 	TabPolicy      = "policy"
+	TabDecisions   = "decisions"
 )
 
 // Tabs is the nav order, shared by the sidebar and the bottom tab bar.
@@ -33,6 +35,7 @@ var Tabs = []struct{ Key, Label string }{
 	{TabCalibration, "Calibration"},
 	{TabRisk, "Risk state"},
 	{TabPolicy, "Policy"},
+	{TabDecisions, "Decisions"},
 }
 
 // View is everything a page or HTMX fragment needs to render.
@@ -57,6 +60,15 @@ type View struct {
 	// renders the unavailable panel: no caps, and nothing inferred from their
 	// absence.
 	Policy PolicyData
+	// Decisions are the decider's journal rows, oldest first, as read on
+	// this request. Empty with DecisionsNote set means the journal has no
+	// decisions yet; DecisionsUnavailable means it could not be read.
+	Decisions []decisionsread.Entry
+	// DecisionsNote says where those rows came from, or why there are none.
+	DecisionsNote string
+	// DecisionsUnavailable reports an unreadable decisions journal, so the
+	// panel says so rather than showing an empty day.
+	DecisionsUnavailable bool
 }
 
 // PolicyData is what the Policy tab renders: the engine's caps_status reading,
