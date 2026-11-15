@@ -129,17 +129,47 @@ func TestArmKillControlsAreDisabled(t *testing.T) {
 			t.Errorf("risk page contains %q — controls must be inert", banned)
 		}
 	}
-	if !strings.Contains(html, "Gated in this build") {
-		t.Error("risk page must explain that arm/kill is gated")
+	if !strings.Contains(html, "Kill and disarm are not wired") {
+		t.Error("risk page must explain that kill and disarm are not wired")
 	}
 }
 
-func TestNoDocumentPostsAnywhere(t *testing.T) {
-	html := render(t, Layout(testView()))
-	for _, banned := range []string{"hx-post", "hx-put", "hx-delete", `action="/arm"`, "fetch(", "XMLHttpRequest"} {
-		if strings.Contains(strings.ToLower(html), strings.ToLower(banned)) {
-			t.Errorf("document contains %q; the console is read-only", banned)
+// The console has exactly one form post, the arming window, and it exists only
+// on a policy page that was configured with an allowlist and reached through the
+// Access gateway. Every other page and every other verb stays inert.
+func TestOnlyTheArmingFormPosts(t *testing.T) {
+	for _, tab := range []string{TabOverview, TabJournal, TabCalibration, TabRisk, TabDecisions, TabPolicy} {
+		v := testView()
+		v.Tab = tab
+		html := strings.ToLower(render(t, Layout(v)))
+		for _, banned := range []string{"hx-post", "hx-put", "hx-delete", `action="/arm"`, "fetch(", "xmlhttprequest"} {
+			if strings.Contains(html, banned) {
+				t.Errorf("tab %q contains %q with no arming control configured", tab, banned)
+			}
 		}
+	}
+
+	// With the control configured, the policy page carries the one allowed post.
+	v := testView()
+	v.Tab = TabPolicy
+	v.Policy.Arm = ArmData{
+		Enabled:              true,
+		Email:                "joe@example.com",
+		CSRF:                 "0123456789abcdef0123456789abcdef",
+		PerOrderCeilingCents: 5000,
+		DailyCeilingCents:    15000,
+	}
+	html := strings.ToLower(render(t, Layout(v)))
+	if !strings.Contains(html, `action="/arm"`) {
+		t.Fatal("armed policy page lost its form")
+	}
+	for _, banned := range []string{"hx-post", "hx-put", "hx-delete", "fetch(", "xmlhttprequest"} {
+		if strings.Contains(html, banned) {
+			t.Errorf("policy page contains %q", banned)
+		}
+	}
+	if n := strings.Count(html, `action="/`); n != 1 {
+		t.Errorf("policy page has %d form actions, want exactly the arming form", n)
 	}
 }
 

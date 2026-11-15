@@ -46,6 +46,10 @@ type Options struct {
 	// console booted with. Nil renders the panel's unavailable state: a
 	// console with no journal configured must not imply nothing was decided.
 	Decisions func() DecisionsReading
+	// Arm configures the arming window, the console's only mutating endpoint.
+	// Nil disables it: an environment that does not opt in gets no control and
+	// no route.
+	Arm *ArmOptions
 }
 
 // DecisionsReading is one read of the decisions journal: the rows, plus either
@@ -57,9 +61,10 @@ type DecisionsReading struct {
 }
 
 // New returns the console handler. It serves HTML and embedded static assets,
-// and makes exactly one kind of outbound call: the read-only caps_status tool on
-// the engine's loopback MCP endpoint. There is no order path and no mutating
-// endpoint.
+// and makes two kinds of outbound call, both to the engine over loopback: the
+// read-only caps_status tool, and — only where Options.Arm is set — the
+// loopback admin route that writes an arming window. There is no order path: the
+// console cannot size, place or cancel anything, and it cannot clear a kill.
 func New(opts Options) http.Handler {
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -67,7 +72,7 @@ func New(opts Options) http.Handler {
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)
 	}
-	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log, source: opts.Source, status: opts.Status, caps: opts.Caps, decisions: opts.Decisions}
+	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log, source: opts.Source, status: opts.Status, caps: opts.Caps, decisions: opts.Decisions, arm: opts.Arm}
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServer(web.Static()))))
@@ -81,6 +86,7 @@ func New(opts Options) http.Handler {
 	mux.HandleFunc("GET /risk", s.page(ui.TabRisk))
 	mux.HandleFunc("GET /policy", s.page(ui.TabPolicy))
 	mux.HandleFunc("GET /decisions", s.page(ui.TabDecisions))
+	mux.HandleFunc("POST /arm", s.armHandler())
 	mux.HandleFunc("/", s.notFound)
 	return s.withLogging(mux)
 }
@@ -94,6 +100,8 @@ type server struct {
 	caps   func(context.Context) (engine.Caps, error)
 	// decisions reads the decider journal once per render.
 	decisions func() DecisionsReading
+	// arm is nil when this environment offers no arming control.
+	arm *ArmOptions
 }
 
 // page builds one view from the request and renders either the whole document
@@ -110,6 +118,7 @@ func (s *server) page(tab string) http.HandlerFunc {
 		}
 		if tab == ui.TabPolicy {
 			v.Policy = s.policyReading(r.Context())
+			v.Policy.Arm = s.armReading(w, r, v)
 		}
 		if tab == ui.TabDecisions {
 			if s.decisions == nil {

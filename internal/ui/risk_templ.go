@@ -357,7 +357,7 @@ func Risk(d RiskData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " Gated in this build: arming, kill and re-arm are inert server-side and disabled in the UI.</p><div class=\"row\" style=\"justify-content:flex-start;gap:8px\"><button class=\"btn sm\" type=\"button\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " Kill and disarm are not wired. The console's only control is the arming window on the Policy tab, and the engine refuses to arm while the kill switch is set.</p><div class=\"row\" style=\"justify-content:flex-start;gap:8px\"><button class=\"btn sm\" type=\"button\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

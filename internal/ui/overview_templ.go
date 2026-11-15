@@ -387,7 +387,7 @@ func Overview(d OverviewData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, " Arming and kill are gated in this build — the controls below are inert.</p><div class=\"row\" style=\"justify-content:flex-start;gap:8px\"><button class=\"btn sm\" type=\"button\" disabled aria-disabled=\"true\" title=\"Gated in v1 — arming is not wired\">Disarm</button> <button class=\"btn sm dng\" type=\"button\" disabled aria-disabled=\"true\" title=\"Gated in v1 — kill is not wired\">Kill switch</button> <button class=\"btn sm\" type=\"button\" disabled aria-disabled=\"true\" title=\"Gated in v1 — re-arm is not wired\">Re-arm</button></div></div></div><div class=\"card c8\"><h2>Why nothing happened</h2><div class=\"tiles\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, " Arming lives on the Policy tab. These two stay inert: the console cannot disarm, and the kill switch is not wired to any control.</p><div class=\"row\" style=\"justify-content:flex-start;gap:8px\"><button class=\"btn sm\" type=\"button\" disabled aria-disabled=\"true\" title=\"Gated in v1 — arming is not wired\">Disarm</button> <button class=\"btn sm dng\" type=\"button\" disabled aria-disabled=\"true\" title=\"Gated in v1 — kill is not wired\">Kill switch</button> <button class=\"btn sm\" type=\"button\" disabled aria-disabled=\"true\" title=\"Gated in v1 — re-arm is not wired\">Re-arm</button></div></div></div><div class=\"card c8\"><h2>Why nothing happened</h2><div class=\"tiles\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
