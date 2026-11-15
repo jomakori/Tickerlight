@@ -7,9 +7,11 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -19,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/armctl"
 	"github.com/jomakori/tickerlight/internal/decisionsread"
 	"github.com/jomakori/tickerlight/internal/engine"
 	"github.com/jomakori/tickerlight/internal/journalread"
@@ -154,6 +157,12 @@ func main() {
 	// argv is visible in ps — it comes from the engine's own variable,
 	// TRADING_MCP_HTTP_TOKEN.
 	engineMCPURL := flag.String("engine-mcp-url", envOr("TICKERLIGHT_ENGINE_MCP_URL", "http://127.0.0.1:8090/mcp"), "engine MCP endpoint the Policy panel reads caps_status from; must be loopback")
+
+	// Arming: the console's one control. It is off unless this environment
+	// names the Cloudflare Access identities allowed to use it, so a console
+	// deployed without the allowlist exposes no route and no form.
+	engineAdminURL := flag.String("engine-admin-url", envOr("TICKERLIGHT_ENGINE_ADMIN_URL", "http://127.0.0.1:8090"), "engine admin base URL the arming window is posted to; must be loopback")
+	armEmails := flag.String("arm-emails", envOr("TICKERLIGHT_ARM_EMAILS", ""), "comma-separated Cloudflare Access identities allowed to arm; empty disables the control")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -223,6 +232,20 @@ func main() {
 		decisionsSource = func() server.DecisionsReading { return loadDecisions(path, log) }
 	}
 
+	// Arming is opt-in per environment: no allowlist, no route. The admin URL
+	// must stay loopback for the same reason the MCP URL does — the window is
+	// written by the engine beside this process, not by anything off-host.
+	var armOptions *server.ArmOptions
+	if emails := splitList(*armEmails); len(emails) > 0 {
+		if err := requireLoopback("engine-admin-url", *engineAdminURL); err != nil {
+			log.Error("refusing to start with a non-loopback admin URL", "err", err)
+			os.Exit(1)
+		}
+		client := armctl.Client{URL: *engineAdminURL}
+		armOptions = &server.ArmOptions{AllowedEmails: emails, Arm: client.Arm}
+		log.Info("arming control enabled", "identities", len(emails), "engine", *engineAdminURL)
+	}
+
 	handler := server.New(server.Options{
 		Rows:      rows,
 		Log:       log,
@@ -230,6 +253,7 @@ func main() {
 		Status:    statusSource,
 		Caps:      capsSource,
 		Decisions: decisionsSource,
+		Arm:       armOptions,
 	})
 	srv := &http.Server{
 		Addr:              *addr,
@@ -291,4 +315,35 @@ func main() {
 		log.Error("listen", "err", err)
 		os.Exit(1)
 	}
+}
+
+// requireLoopback rejects an engine URL that is not loopback. The arming window
+// is written by the engine beside this process; posting it across the network
+// would move the one control off the pod.
+func requireLoopback(name, raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%s %q: %w", name, raw, err)
+	}
+	switch host := u.Hostname(); {
+	case host == "127.0.0.1", host == "::1", strings.EqualFold(host, "localhost"):
+		return nil
+	default:
+		return fmt.Errorf("%s %q is not loopback", name, raw)
+	}
+}
+
+// splitList parses a comma-separated list into lowercase, de-duplicated items.
+func splitList(raw string) []string {
+	var out []string
+	seen := make(map[string]bool)
+	for _, part := range strings.Split(raw, ",") {
+		v := strings.ToLower(strings.TrimSpace(part))
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
 }

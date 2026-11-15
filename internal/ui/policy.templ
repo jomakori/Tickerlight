@@ -4,8 +4,10 @@ package ui
 // today, and the mode, judge threshold and alert-sink state it reports running
 // under. All of it comes from one caps_status response.
 //
-// It is a reading, not a control surface. There is no button on this page that
-// arms, sizes, places, cancels or kills anything, and no form that posts.
+// It is a reading with exactly one control: the arming window, which exists
+// only where this environment configures an allowlist. Nothing here can size,
+// place or cancel an order, disarm, raise a cap above the engine's ceiling, or
+// clear the kill switch.
 templ Policy(d PolicyData) {
 	<section class="grid" aria-label="Engine policy">
 		<div class="card c8">
@@ -46,7 +48,7 @@ templ Policy(d PolicyData) {
 				<div class="row"><span class="tx2">Judge threshold</span><b class="mono">{ reported(d.Caps.JudgeThreshold) }</b></div>
 				<div class="row"><span class="tx2">Alert sink</span><b class="mono">{ reported(d.Caps.AlertsConfigured) }</b></div>
 			</div>
-			<p class="gated-note">@Icon("lock", 14) Read-only: the console calls caps_status and nothing else.</p>
+			<p class="gated-note">@Icon("lock", 14) Read-only: this panel calls caps_status and nothing else.</p>
 		</div>
 
 		<div class="card c12">
@@ -60,6 +62,7 @@ templ Policy(d PolicyData) {
 				evidence that the engine is in paper mode or that alerts are off.
 			</p>
 		</div>
+			@ArmCard(d.Arm)
 	</section>
 }
 

@@ -1,0 +1,70 @@
+package ui
+
+import "strconv"
+
+templ ArmCard(a ArmData) {
+	<div class="card c4" id="arm-card" aria-label="Arming">
+		<div class="row">
+			<h2>Authorization window</h2>
+			if a.Enabled {
+				if a.Kill {
+					<span class="bd bad">killed</span>
+				} else if a.Armed {
+					<span class="bd ok">armed</span>
+				} else {
+					<span class="bd">disarmed</span>
+				}
+			}
+		</div>
+		if !a.Enabled {
+			<p class="note">This console carries no arming control in this environment. Arming stays with the operator CLI.</p>
+		} else {
+			if a.Notice != "" {
+				<p class="arm-ok">{ a.Notice }</p>
+			}
+			if a.Error != "" {
+				<p class="arm-err">{ a.Error }</p>
+			}
+			if !a.ArmedUntil.IsZero() {
+				<p class="note">Armed until <strong>{ a.ArmedUntil.UTC().Format("2006-01-02 15:04 MST") }</strong>. A new window replaces this one; nothing here extends it.</p>
+			}
+			if a.Kill {
+				<p class="note">The engine is killed. Arming is refused until an operator removes the halt file by hand — no page, tool or agent can clear it.</p>
+			}
+			if a.Form() {
+				<form class="arm-form" method="post" action="/arm">
+					<input type="hidden" name="csrf" value={ a.CSRF }/>
+					<label>
+						<span>Window</span>
+						<select name="ttl_minutes">
+							<option value="15">15 minutes</option>
+							<option value="30" selected>30 minutes</option>
+							<option value="60">1 hour</option>
+							<option value="120">2 hours</option>
+						</select>
+					</label>
+					<label>
+						<span>Per-order cap (cents, max { armInt(a.PerOrderCeilingCents) })</span>
+						<input type="number" name="per_order_cap_cents" min="1" max={ armInt(a.PerOrderCeilingCents) } value={ armInt(a.PerOrderCeilingCents) }/>
+					</label>
+					<label>
+						<span>Daily cap (cents, max { armInt(a.DailyCeilingCents) })</span>
+						<input type="number" name="daily_cap_cents" min="1" max={ armInt(a.DailyCeilingCents) } value={ armInt(a.DailyCeilingCents) }/>
+					</label>
+					<label class="chk">
+						<input type="checkbox" name="confirm"/>
+						<span>I authorize live trading for this window, under these caps.</span>
+					</label>
+					<div class="row">
+						<button class="btn pri" type="submit">Arm</button>
+						<span class="note">Identity: { a.Email }</span>
+					</div>
+				</form>
+			}
+			<p class="note">This is the only control on the console. It cannot disarm, place or cancel an order, raise a cap above the engine's ceiling, or clear the kill switch.</p>
+		}
+	</div>
+}
+// armInt renders a cap as the plain integer the form field carries; the page
+// prints money with cents() beside it, never in the input value.
+func armInt(n int64) string { return strconv.FormatInt(n, 10) }

@@ -76,7 +76,7 @@ templ Overview(d OverviewData) {
 			<div class="gate-row">
 				<div class="row"><span class="tx2">Status</span>@killStatus(15, d.View)</div>
 				<div class="row"><span class="tx2">Cooldown</span><b class="mono cdv" data-cd="720">{ CooldownText(d.Limits.CooldownS) }</b></div>
-				<p class="gated-note">@Icon("lock", 14) Arming and kill are gated in this build — the controls below are inert.</p>
+				<p class="gated-note">@Icon("lock", 14) Arming lives on the Policy tab. These two stay inert: the console cannot disarm, and the kill switch is not wired to any control.</p>
 				<div class="row" style="justify-content:flex-start;gap:8px">
 					<button class="btn sm" type="button" disabled aria-disabled="true" title="Gated in v1 — arming is not wired">Disarm</button>
 					<button class="btn sm dng" type="button" disabled aria-disabled="true" title="Gated in v1 — kill is not wired">Kill switch</button>

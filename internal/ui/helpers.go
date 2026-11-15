@@ -77,6 +77,9 @@ type View struct {
 // source of truth. The zero value renders the unavailable panel: no caps, and
 // nothing inferred from their absence.
 type PolicyData struct {
+	// Arm is the arming card's state. It rides on the policy reading because
+	// both answer the same question: what the engine will let this session do.
+	Arm ArmData
 	// Available reports whether Caps holds a reading from the engine. When it
 	// is false the panel shows the failure and no numbers at all.
 	Available bool
@@ -226,8 +229,10 @@ func (v View) Caps() CapsView {
 	}
 }
 
-// ArmKillEnabled reports whether the arm/kill controls are wired to anything.
-// False in v1: the console renders them disabled and there is no handler.
+// ArmKillEnabled reports whether the disarm and kill controls are wired to
+// anything. Still false: the console can open an arming window on the Policy
+// tab, and has no path to disarm either — the engine owns the kill switch and
+// only an operator removes the halt file.
 const ArmKillEnabled = false
 
 // NewView builds the default view over a ledger.
