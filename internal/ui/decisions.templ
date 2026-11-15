@@ -1,0 +1,141 @@
+package ui
+
+import (
+	"strconv"
+
+	"github.com/jomakori/tickerlight/internal/decisionsread"
+)
+
+// Decisions is the read-only view of what the decider asked Jev and what the
+// gate and the engine did with the answer. It has no controls: nothing here
+// can arm, disarm, size or cancel anything.
+templ Decisions(d DecisionsData) {
+	<section aria-label="Decisions">
+		if d.Unavailable {
+			<div class="card">
+				<div class="row">
+					<h2>Decisions</h2>
+					<span class="tx2">journal unavailable</span>
+				</div>
+				<p class="note">The decisions journal could not be read, so this panel shows no rows. { d.Note }</p>
+			</div>
+		} else {
+			<div class="tiles">
+				<div class="tile">
+					<span class="lbl">Ticks today</span>
+					<span class="n32">{ strconv.Itoa(d.TicksToday) }</span>
+				</div>
+				<div class="tile">
+					<span class="lbl">Executed</span>
+					<span class="n32">{ strconv.Itoa(d.Executed) }</span>
+				</div>
+				<div class="tile">
+					<span class="lbl">Held</span>
+					<span class="n32">{ strconv.Itoa(heldTotal(d)) }</span>
+				</div>
+				<div class="tile">
+					<span class="lbl">Jev latency p50</span>
+					<span class="n32">{ strconv.FormatInt(d.P50LatencyMS, 10) }<span class="dim">ms</span></span>
+				</div>
+			</div>
+			<div class="card">
+				<div class="row">
+					<h2>Decisions</h2>
+					<span class="tx2">{ strconv.Itoa(len(d.Rows)) } recorded</span>
+				</div>
+				if len(d.Held) > 0 {
+					<div class="chips">
+						for _, h := range d.Held {
+							<span class="chip"><span class="chip-k">{ h.Reason }</span>{ strconv.Itoa(h.Count) }</span>
+						}
+					</div>
+				}
+				if len(d.Rows) == 0 {
+					<p class="empty">No decisions recorded yet. The decider writes one line per tick in market hours, and only after the engine answers its arming guards.</p>
+				} else {
+					<div class="scroll">
+						<table class="tbl">
+							<thead>
+								<tr>
+									<th>Time</th>
+									<th>Symbol</th>
+									<th>Jev answer</th>
+									<th>Setup</th>
+									<th>Risk</th>
+									<th>Verdict</th>
+									<th>Latency</th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, e := range d.Rows {
+									<tr>
+										<td class="mono">{ decisionTime(e.Time) }</td>
+										<td class="mono">{ symbolOrDash(e) }</td>
+										<td>{ ChoiceLabel(e) }</td>
+										<td class="mono">{ scoreOrDash(e) }</td>
+										<td class="mono">{ riskOrDash(e) }</td>
+										<td>@verdict(e)</td>
+										<td class="mono">{ latency(e) }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
+			</div>
+			<p class="note">{ d.Note }</p>
+		}
+	</section>
+}
+
+// verdict is the per-row outcome badge: executed, the reason it held, or the
+// error the tick hit.
+templ verdict(e decisionsread.Entry) {
+	if e.Order != nil && e.Order.Placed {
+		<span class="bd ok">executed · { e.Order.Outcome }</span>
+	} else if r := DecisionReason(e); r != "" {
+		<span class={ "bd", verdictClass(r) } title={ e.Error }>{ r }</span>
+	} else {
+		<span class="bd neu">—</span>
+	}
+}
+
+// heldTotal counts decisions held on purpose, so the strip never adds an error
+// to a gate refusal.
+func heldTotal(d DecisionsData) int {
+	n := 0
+	for _, h := range d.Held {
+		if h.Reason != "error" {
+			n += h.Count
+		}
+	}
+	return n
+}
+
+func symbolOrDash(e decisionsread.Entry) string {
+	if e.Symbol == "" {
+		return "—"
+	}
+	return e.Symbol
+}
+
+func scoreOrDash(e decisionsread.Entry) string {
+	if e.Jev == nil {
+		return "—"
+	}
+	return pct(e.Jev.Score)
+}
+
+func riskOrDash(e decisionsread.Entry) string {
+	if e.Jev == nil {
+		return "—"
+	}
+	return pct(e.Jev.Noul)
+}
+
+func latency(e decisionsread.Entry) string {
+	if e.LatencyMS <= 0 {
+		return "—"
+	}
+	return strconv.FormatInt(e.LatencyMS, 10) + "ms"
+}

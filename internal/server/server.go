@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jomakori/tickerlight/internal/decisionsread"
 	"github.com/jomakori/tickerlight/internal/engine"
 	"github.com/jomakori/tickerlight/internal/status"
 	"github.com/jomakori/tickerlight/internal/tickerdata"
@@ -40,6 +41,19 @@ type Options struct {
 	// and never falls back to its own environment for mode, judge threshold or
 	// alert-sink state.
 	Caps func(context.Context) (engine.Caps, error)
+	// Decisions reads the decider's decisions journal and is called once per
+	// render, so the panel follows the decider instead of the state the
+	// console booted with. Nil renders the panel's unavailable state: a
+	// console with no journal configured must not imply nothing was decided.
+	Decisions func() DecisionsReading
+}
+
+// DecisionsReading is one read of the decisions journal: the rows, plus either
+// a note describing where they came from or why the read failed.
+type DecisionsReading struct {
+	Rows        []decisionsread.Entry
+	Note        string
+	Unavailable bool
 }
 
 // New returns the console handler. It serves HTML and embedded static assets,
@@ -53,7 +67,7 @@ func New(opts Options) http.Handler {
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)
 	}
-	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log, source: opts.Source, status: opts.Status, caps: opts.Caps}
+	s := &server{rows: opts.Rows, now: opts.Now, log: opts.Log, source: opts.Source, status: opts.Status, caps: opts.Caps, decisions: opts.Decisions}
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServer(web.Static()))))
@@ -66,6 +80,7 @@ func New(opts Options) http.Handler {
 	mux.HandleFunc("GET /calibration", s.page(ui.TabCalibration))
 	mux.HandleFunc("GET /risk", s.page(ui.TabRisk))
 	mux.HandleFunc("GET /policy", s.page(ui.TabPolicy))
+	mux.HandleFunc("GET /decisions", s.page(ui.TabDecisions))
 	mux.HandleFunc("/", s.notFound)
 	return s.withLogging(mux)
 }
@@ -77,6 +92,8 @@ type server struct {
 	source string
 	status func() status.Snapshot
 	caps   func(context.Context) (engine.Caps, error)
+	// decisions reads the decider journal once per render.
+	decisions func() DecisionsReading
 }
 
 // page builds one view from the request and renders either the whole document
@@ -93,6 +110,17 @@ func (s *server) page(tab string) http.HandlerFunc {
 		}
 		if tab == ui.TabPolicy {
 			v.Policy = s.policyReading(r.Context())
+		}
+		if tab == ui.TabDecisions {
+			if s.decisions == nil {
+				v.DecisionsNote = "no decisions journal is configured in this process"
+				v.DecisionsUnavailable = true
+			} else {
+				d := s.decisions()
+				v.Decisions = d.Rows
+				v.DecisionsNote = d.Note
+				v.DecisionsUnavailable = d.Unavailable
+			}
 		}
 
 		detail := false

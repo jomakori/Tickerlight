@@ -54,6 +54,8 @@ templ ViewShell(v View) {
 			@Risk(v.RiskState())
 		} else if v.Tab == TabPolicy {
 			@Policy(v.Policy)
+		} else if v.Tab == TabDecisions {
+			@Decisions(v.DecisionsPage())
 		} else {
 			@Overview(v.Overview())
 		}
