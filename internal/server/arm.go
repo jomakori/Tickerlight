@@ -32,30 +32,19 @@ const armTimeout = 5 * time.Second
 // the engine refuses each of those on its own route, and this handler has no
 // code path for them.
 type ArmOptions struct {
-	// AllowedEmails is the Cloudflare Access identity allowlist. An empty list
-	// disables the endpoint entirely; it must never mean everyone.
-	AllowedEmails []string
 	// Arm posts the window to the engine's loopback admin route.
 	Arm func(context.Context, armctl.Request) (armctl.Result, error)
-}
-
-// allows reports whether a Cloudflare Access identity may arm.
-func (o *ArmOptions) allows(email string) bool {
-	if email == "" {
-		return false
-	}
-	for _, want := range o.AllowedEmails {
-		if strings.EqualFold(strings.TrimSpace(want), email) {
-			return true
-		}
-	}
-	return false
 }
 
 // accessEmail reads the Cloudflare Access identity istio forwards after it has
 // validated the JWT at the gateway. The header is trusted because it is written
 // by the gateway on this path; a request that reaches the pod some other way
 // carries no identity and therefore gets no control.
+//
+// The Access policy on the public host is the only allowlist. There is no
+// second list here: the people who can reach this page are the people the
+// gateway already admitted. This check does not verify the JWT signature —
+// istio did that before writing the header.
 func accessEmail(r *http.Request) string {
 	raw := r.Header.Get("x-cf-access-jwt-payload")
 	if raw == "" {
@@ -130,9 +119,9 @@ func (s *server) armHandler() http.HandlerFunc {
 			return
 		}
 		email := accessEmail(r)
-		if !s.arm.allows(email) {
-			s.log.Warn("arm refused: identity not allowed", "email", email)
-			http.Error(w, "not authorized to arm: this request did not carry an allowed Cloudflare Access identity", http.StatusForbidden)
+		if email == "" {
+			s.log.Warn("arm refused: no Cloudflare Access identity")
+			http.Error(w, "not authorized to arm: this request did not carry a Cloudflare Access identity", http.StatusForbidden)
 			return
 		}
 		if err := r.ParseForm(); err != nil {
@@ -215,8 +204,8 @@ func redirectArm(w http.ResponseWriter, r *http.Request, kind, msg string) {
 }
 
 // armReading builds the arming card's state for one policy render. A form is
-// offered only when the request carries an allowed Cloudflare Access identity
-// and the engine's ceilings are known: the form must not invent a ceiling, and
+// offered only when the request carries a Cloudflare Access identity and the
+// engine's ceilings are known: the form must not invent a ceiling, and
 // a request that reached the pod some other way gets an explanation, not a
 // control.
 func (s *server) armReading(w http.ResponseWriter, r *http.Request, v ui.View) ui.ArmData {
@@ -234,8 +223,6 @@ func (s *server) armReading(w http.ResponseWriter, r *http.Request, v ui.View) u
 	switch {
 	case d.Email == "":
 		d.Error = "No Cloudflare Access identity reached this request, so no control is offered. Reload through the Access-protected host."
-	case !s.arm.allows(d.Email):
-		d.Error = "The Access identity on this session is not on the arming allowlist."
 	case !v.Policy.Available:
 		d.Error = "The engine's caps could not be read, so the window's ceilings are unknown and no form is offered."
 	default:

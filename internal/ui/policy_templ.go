@@ -14,7 +14,7 @@ import templruntime "github.com/a-h/templ/runtime"
 // under. All of it comes from one caps_status response.
 //
 // It is a reading with exactly one control: the arming window, which exists
-// only where this environment configures an allowlist. Nothing here can size,
+// only where this environment names the engine's admin URL. Nothing here can size,
 // place or cancel an order, disarm, raise a cap above the engine's ceiling, or
 // clear the kill switch.
 func Policy(d PolicyData) templ.Component {
