@@ -19,6 +19,13 @@ RUN CGO_ENABLED=0 go build \
     -o /tmp/tickerlight \
     ./cmd/tickerlight
 
+# Jev-driven decider ships in the same image; the sidecar selects it by command.
+RUN CGO_ENABLED=0 go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /tmp/trading-decider \
+    ./cmd/trading-decider
+
 # Runtime stage
 FROM alpine:3.21
 
@@ -30,6 +37,7 @@ RUN addgroup -g 65532 app && adduser -D -u 65532 -G app app
 
 # Copy binary from builder
 COPY --from=builder /tmp/tickerlight /usr/local/bin/tickerlight
+COPY --from=builder /tmp/trading-decider /usr/local/bin/trading-decider
 
 # Switch to non-root user
 USER 65532:65532
