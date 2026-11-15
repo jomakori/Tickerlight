@@ -35,11 +35,16 @@ func (a ArmData) Form() bool {
 }
 
 // State is the card's headline: the engine's arming state, or the kill switch.
+// A window this request just wrote counts as armed even before the engine's
+// caps_status snapshot catches up on its own cadence, as long as it has not
+// already expired.
 func (a ArmData) State() string {
 	switch {
 	case a.Kill:
 		return "killed"
 	case a.Armed:
+		return "armed"
+	case !a.ArmedUntil.IsZero() && a.ArmedUntil.After(time.Now()):
 		return "armed"
 	default:
 		return "disarmed"

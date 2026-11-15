@@ -1,6 +1,7 @@
 package ui
 
 import "strconv"
+import "time"
 
 templ ArmCard(a ArmData) {
 	<div class="card c4" id="arm-card" aria-label="Arming">
@@ -11,6 +12,8 @@ templ ArmCard(a ArmData) {
 					<span class="bd bad">killed</span>
 				} else if a.Armed {
 					<span class="bd ok">armed</span>
+				} else if !a.ArmedUntil.IsZero() && a.ArmedUntil.After(time.Now()) {
+					<span class="bd ok">armed until { a.ArmedUntil.UTC().Format("15:04 MST") }</span>
 				} else {
 					<span class="bd">disarmed</span>
 				}
