@@ -4,10 +4,10 @@ package ui
 // today, and the mode, judge threshold and alert-sink state it reports running
 // under. All of it comes from one caps_status response.
 //
-// It is a reading with exactly one control: the arming window, which exists
-// only where this environment names the engine's admin URL. Nothing here can size,
-// place or cancel an order, disarm, raise a cap above the engine's ceiling, or
-// clear the kill switch.
+// It is a reading, plus one control: the arming window, which exists only where
+// this environment names the engine's admin URL. Kill and disarm are not here —
+// they live on the Overview tab. Nothing here can size, place or cancel an
+// order, raise a cap above the engine's ceiling, or clear the kill switch.
 templ Policy(d PolicyData) {
 	<section class="grid" aria-label="Engine policy">
 		<div class="card c8">
@@ -60,6 +60,14 @@ templ Policy(d PolicyData) {
 				has one source of truth and never infers a mode, a threshold or an alert state from the console's
 				own environment. A field the engine does not send renders as “not reported”; absence is not
 				evidence that the engine is in paper mode or that alerts are off.
+			</p>
+		</div>
+		<div class="card c12">
+			<h2>Kill and disarm</h2>
+			<p class="tx2" style="margin:0">
+				The kill switch and disarm are on the
+				<a href="/" hx-get="/" hx-target="#view" hx-select="#view" hx-swap="outerHTML" hx-push-url="true">Overview</a>
+				tab, with what the engine answered last. This page opens a window and nothing else.
 			</p>
 		</div>
 			@ArmCard(d.Arm)

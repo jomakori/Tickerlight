@@ -268,7 +268,7 @@ func ArmCard(a ArmData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, " <p class=\"note\">This is the only control on the console. It cannot disarm, place or cancel an order, raise a cap above the engine's ceiling, or clear the kill switch.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, " <p class=\"note\">This card opens a window and nothing else. It cannot place or cancel an order, raise a cap above the engine's ceiling, or clear the kill switch.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

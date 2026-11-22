@@ -290,31 +290,20 @@ func TestArmAndKillHaveNoRoute(t *testing.T) {
 	}
 }
 
-func TestGatedControlsRenderDisabled(t *testing.T) {
+// With no engine admin client in the process there is no kill or disarm to
+// offer, so the pages draw no form and no disabled button: the Overview panel
+// says why in one sentence instead.
+func TestNoDeadControlsWithoutAnAdminClient(t *testing.T) {
 	h := fixture(t)
+	body := get(t, h, "/").body
+	if !strings.Contains(body, "This console carries no engine admin client") {
+		t.Error("Overview must say why it offers no kill or disarm control")
+	}
 	for _, path := range []string{"/", "/risk"} {
-		res := get(t, h, path)
-		body := res.body
-		start := strings.Index(body, "<button")
-		if start < 0 {
-			t.Fatalf("%s renders no gated control", path)
-		}
-		for {
-			end := strings.Index(body[start:], "</button>")
-			if end < 0 {
-				break
-			}
-			tag := body[start : start+strings.Index(body[start:], ">")]
-			for _, banned := range []string{"hx-", "onclick", "type=\"submit\""} {
-				if strings.Contains(tag, banned) {
-					t.Errorf("%s gated button carries %q: %s", path, banned, tag)
-				}
-			}
-			start += end + len("</button>")
-			if next := strings.Index(body[start:], "<button"); next < 0 {
-				break
-			} else {
-				start += next
+		body := get(t, h, path).body
+		for _, banned := range []string{"<button", "<form", "disabled", `action="/kill"`, `action="/disarm"`} {
+			if strings.Contains(body, banned) {
+				t.Errorf("%s renders %q with no admin client — say why instead", path, banned)
 			}
 		}
 	}

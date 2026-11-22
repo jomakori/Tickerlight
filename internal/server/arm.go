@@ -34,6 +34,14 @@ const armTimeout = 5 * time.Second
 type ArmOptions struct {
 	// Arm posts the window to the engine's loopback admin route.
 	Arm func(context.Context, armctl.Request) (armctl.Result, error)
+	// Kill posts to the engine's loopback admin kill route. Nil keeps Kill's
+	// 404 behavior: the route exists only when Arm is configured, but a
+	// deployment that wires Arm without Kill still gets a safe response
+	// rather than a nil-pointer panic.
+	Kill func(context.Context) (armctl.KillResult, error)
+	// Disarm posts to the engine's loopback admin disarm route. Same nil
+	// handling as Kill.
+	Disarm func(context.Context) (armctl.DisarmResult, error)
 }
 
 // accessEmail reads the Cloudflare Access identity istio forwards after it has
@@ -176,6 +184,99 @@ func (s *server) armHandler() http.HandlerFunc {
 	}
 }
 
+// killHandler trips the engine's halt file. It reuses armHandler's three
+// guards verbatim (Access identity, double-submit CSRF via csrfOK, which
+// itself checks Sec-Fetch-Site) and otherwise skips arming's form fields:
+// there is nothing to confirm or size for a kill.
+func (s *server) killHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.arm == nil || s.arm.Kill == nil {
+			http.NotFound(w, r)
+			return
+		}
+		email := accessEmail(r)
+		if email == "" {
+			s.log.Warn("kill refused: no Cloudflare Access identity")
+			http.Error(w, "not authorized to kill: this request did not carry a Cloudflare Access identity", http.StatusForbidden)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "malformed form", http.StatusBadRequest)
+			return
+		}
+		if !csrfOK(r) {
+			http.Error(w, "stale form: reload the policy page and try again", http.StatusForbidden)
+			return
+		}
+		if r.PostFormValue("confirm") != "on" {
+			http.Error(w, "tick the confirmation box to kill", http.StatusBadRequest)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), armTimeout)
+		defer cancel()
+		res, err := s.arm.Kill(ctx)
+		if err != nil {
+			s.log.Warn("kill call failed", "email", email, "err", err)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		s.log.Info("kill issued", "email", email, "status", res.Status)
+		http.Redirect(w, r, "/?"+ctlQuery("killed", res.Status, res.JournalError).Encode(), http.StatusSeeOther)
+	}
+}
+
+// disarmHandler closes an open arming window. Same guards as killHandler.
+func (s *server) disarmHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.arm == nil || s.arm.Disarm == nil {
+			http.NotFound(w, r)
+			return
+		}
+		email := accessEmail(r)
+		if email == "" {
+			s.log.Warn("disarm refused: no Cloudflare Access identity")
+			http.Error(w, "not authorized to disarm: this request did not carry a Cloudflare Access identity", http.StatusForbidden)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "malformed form", http.StatusBadRequest)
+			return
+		}
+		if !csrfOK(r) {
+			http.Error(w, "stale form: reload the policy page and try again", http.StatusForbidden)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), armTimeout)
+		defer cancel()
+		res, err := s.arm.Disarm(ctx)
+		if err != nil {
+			s.log.Warn("disarm call failed", "email", email, "err", err)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		s.log.Info("disarm issued", "email", email, "status", res.Status)
+		http.Redirect(w, r, "/?"+ctlQuery("disarmed", res.Status, res.JournalError).Encode(), http.StatusSeeOther)
+	}
+}
+
+// ctlQuery is the Overview control result, in the query string. ctl names the
+// control that ran, status is the engine's own reason code verbatim, and
+// journal_error rides along when the engine reported one — so the page states
+// what the engine said, not what the console hoped.
+func ctlQuery(action, status, journalError string) url.Values {
+	q := url.Values{}
+	q.Set("ctl", action)
+	if status != "" {
+		q.Set("status", status)
+	}
+	if journalError != "" {
+		q.Set("journal_error", journalError)
+	}
+	return q
+}
+
 // parseOptionalCents treats an empty field as "the engine's ceiling".
 func parseOptionalCents(raw string) (int64, error) {
 	raw = strings.TrimSpace(raw)
@@ -201,6 +302,47 @@ func redirectArm(w http.ResponseWriter, r *http.Request, kind, msg string) {
 		q.Set("msg", msg)
 	}
 	http.Redirect(w, r, "/policy?"+q.Encode(), http.StatusSeeOther)
+}
+
+// controlReading builds the Overview kill-and-disarm panel's state for one
+// render: whether this process carries an engine admin client, the identity and
+// token that make the forms submittable, and the answer the last control wrote
+// into the query string.
+//
+// A form is offered only where the client exists and the request carries a
+// Cloudflare Access identity. Everything else is a sentence, never a disabled
+// button: a control the console cannot reach is not a control.
+func (s *server) controlReading(w http.ResponseWriter, r *http.Request, v ui.View) ui.ControlData {
+	// Kill and armed come from the engine's own snapshot, the same reading the
+	// arming card uses. Without a snapshot both are false, and the panel says
+	// nothing about state it did not read.
+	d := ui.ControlData{Kill: v.Status.Kill, Armed: v.Status.Armed}
+	q := r.URL.Query()
+	d.Action = q.Get("ctl")
+	d.Answered = q.Get("status")
+	d.JournalError = q.Get("journal_error")
+
+	if s.arm == nil {
+		return d
+	}
+	d.KillWired = s.arm.Kill != nil
+	d.DisarmWired = s.arm.Disarm != nil
+	d.Enabled = d.KillWired || d.DisarmWired
+	if !d.Enabled {
+		return d
+	}
+
+	d.Email = accessEmail(r)
+	switch {
+	case d.Email == "":
+		d.Error = "No Cloudflare Access identity reached this request, so no control is offered. Reload through the Access-protected host."
+	default:
+		d.CSRF = s.issueCSRF(w, r)
+		if d.CSRF == "" {
+			d.Error = "Could not issue a form token; reload the page."
+		}
+	}
+	return d
 }
 
 // armReading builds the arming card's state for one policy render. A form is

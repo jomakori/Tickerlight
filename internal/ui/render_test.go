@@ -119,18 +119,21 @@ func TestEveryTabRenders(t *testing.T) {
 	}
 }
 
-func TestArmKillControlsAreDisabled(t *testing.T) {
+// The risk page reports the kill state and nothing else. Kill and disarm are
+// live controls on the Overview tab, so drawing them here — live or disabled —
+// would either duplicate the control or promise one the page cannot reach.
+func TestRiskPageOffersNoDeadControls(t *testing.T) {
 	html := render(t, Risk(testView().RiskState()))
-	if got := strings.Count(html, "disabled"); got < 3 {
-		t.Errorf("expected the three gated controls to be disabled, found %d disabled attrs", got)
+	if strings.Contains(html, "disabled") {
+		t.Error("risk page renders a disabled control; an unreachable control must not be drawn at all")
 	}
-	for _, banned := range []string{"hx-post", "hx-put", "hx-delete", `method="post"`, "onclick=", "x-on:"} {
+	for _, banned := range []string{"Re-arm", "not wired", "Kill switch</button>", ">Disarm</button>", "hx-post", "hx-put", "hx-delete", `method="post"`, "onclick=", "x-on:"} {
 		if strings.Contains(html, banned) {
-			t.Errorf("risk page contains %q — controls must be inert", banned)
+			t.Errorf("risk page contains %q", banned)
 		}
 	}
-	if !strings.Contains(html, "Kill and disarm are not wired") {
-		t.Error("risk page must explain that kill and disarm are not wired")
+	if !strings.Contains(html, "Kill and disarm are on the Overview tab") {
+		t.Error("risk page must point at the Overview tab for kill and disarm")
 	}
 }
 

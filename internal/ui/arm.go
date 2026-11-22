@@ -2,8 +2,8 @@ package ui
 
 import "time"
 
-// ArmData is the arming card's state. The card is the console's only control:
-// it opens a trading window and can do nothing else.
+// ArmData is the arming card's state: it opens a trading window and can do
+// nothing else. Kill and disarm are separate controls, on the Overview tab.
 type ArmData struct {
 	// Enabled reports that this environment carries the control at all. When
 	// it is false the card explains where arming lives instead.

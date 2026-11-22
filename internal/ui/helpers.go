@@ -60,6 +60,11 @@ type View struct {
 	// renders the unavailable panel: no caps, and nothing inferred from their
 	// absence.
 	Policy PolicyData
+	// Control is the Overview kill-and-disarm panel: whether this process
+	// carries an engine admin client, the identity-backed form token, and the
+	// engine's answer from the last control. Its zero value renders the panel's
+	// "no admin client" sentence and no form.
+	Control ControlData
 	// Decisions are the decider's journal rows, oldest first, as read on
 	// this request. Empty with DecisionsNote set means the journal has no
 	// decisions yet; DecisionsUnavailable means it could not be read.
@@ -228,12 +233,6 @@ func (v View) Caps() CapsView {
 		Used:      used,
 	}
 }
-
-// ArmKillEnabled reports whether the disarm and kill controls are wired to
-// anything. Still false: the console can open an arming window on the Policy
-// tab, and has no path to disarm either — the engine owns the kill switch and
-// only an operator removes the halt file.
-const ArmKillEnabled = false
 
 // NewView builds the default view over a ledger.
 func NewView(rows []tickerdata.Attempt, now time.Time) View {
