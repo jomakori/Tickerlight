@@ -57,12 +57,7 @@ templ Risk(d RiskData) {
 				<div class="row"><span class="tx2">Venue rejects</span><b class="mono">{ strconv.Itoa(d.VenueFail) }</b></div>
 				<div class="row"><span class="tx2">Last fill</span><b class="mono">{ d.LastFill }</b></div>
 			</div>
-			<p class="gated-note">@Icon("lock", 14) Kill and disarm are not wired. The console's only control is the arming window on the Policy tab, and the engine refuses to arm while the kill switch is set.</p>
-			<div class="row" style="justify-content:flex-start;gap:8px">
-				<button class="btn sm" type="button" disabled?={ !ArmKillEnabled } aria-disabled={ strconv.FormatBool(!ArmKillEnabled) } title="Gated in v1 — arming is not wired">Disarm</button>
-				<button class="btn sm dng" type="button" disabled?={ !ArmKillEnabled } aria-disabled={ strconv.FormatBool(!ArmKillEnabled) } title="Gated in v1 — kill is not wired">Kill switch</button>
-				<button class="btn sm" type="button" disabled?={ !ArmKillEnabled } aria-disabled={ strconv.FormatBool(!ArmKillEnabled) } title="Gated in v1 — re-arm is not wired">Re-arm</button>
-			</div>
+			<p class="gated-note">@Icon("lock", 14) Kill and disarm are on the Overview tab. This panel is a reading; the engine still refuses to arm while the kill switch is set.</p>
 		</div>
 
 		<div class="card c12">

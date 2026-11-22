@@ -71,17 +71,52 @@ templ Overview(d OverviewData) {
 			</div>
 		</div>
 
-		<div class="card c4">
-			<h2>Kill switch</h2>
+		<div class="card c4" id="controls">
+			<h2>Trading controls</h2>
+			{{ tone, text := d.Control.Banner() }}
+			if text != "" {
+				<p class={ "arm-" + tone } role="status">{ text }</p>
+			}
 			<div class="gate-row">
-				<div class="row"><span class="tx2">Status</span>@killStatus(15, d.View)</div>
+				<div class="row"><span class="tx2">Kill switch</span>@killStatus(15, d.View)</div>
 				<div class="row"><span class="tx2">Cooldown</span><b class="mono cdv" data-cd="720">{ CooldownText(d.Limits.CooldownS) }</b></div>
-				<p class="gated-note">@Icon("lock", 14) Arming lives on the Policy tab. These two stay inert: the console cannot disarm, and the kill switch is not wired to any control.</p>
-				<div class="row" style="justify-content:flex-start;gap:8px">
-					<button class="btn sm" type="button" disabled aria-disabled="true" title="Gated in v1 — arming is not wired">Disarm</button>
-					<button class="btn sm dng" type="button" disabled aria-disabled="true" title="Gated in v1 — kill is not wired">Kill switch</button>
-					<button class="btn sm" type="button" disabled aria-disabled="true" title="Gated in v1 — re-arm is not wired">Re-arm</button>
-				</div>
+				<p class="gated-note">@Icon("lock", 14) A kill halts trading and stays in force. This console cannot undo one: undo is filesystem access to the engine volume by a human, and there is no button here that clears it.</p>
+
+				if !d.Control.Enabled {
+					<p class="tx2" style="margin:0">This console carries no engine admin client, so it cannot kill or disarm anything and offers no form for either.</p>
+				} else {
+					if d.Control.Error != "" {
+						<p class="arm-err" role="alert">{ d.Control.Error }</p>
+					}
+					if d.Control.Kill {
+						<p class="tx2" style="margin:0">The engine reports the kill switch set, so there is nothing left for this form to do.</p>
+					} else if d.Control.KillForm() {
+						<details class="ctl">
+							<summary>Kill trading…</summary>
+							<form class="arm-form" method="post" action="/kill">
+								<input type="hidden" name="csrf" value={ d.Control.CSRF }/>
+								<label class="chk">
+									<input type="checkbox" name="confirm" value="on" required/>
+									<span>I understand this halts trading now and that this console cannot undo it.</span>
+								</label>
+								<div class="row" style="justify-content:flex-start">
+									<button class="btn dng" type="submit">Kill trading</button>
+								</div>
+							</form>
+						</details>
+					}
+					if d.Control.DisarmForm() {
+						<h3>Disarm</h3>
+						<p class="tx2" style="margin:0">Disarm closes the open window only. Open orders and positions are untouched: nothing is cancelled and nothing is flattened.</p>
+						<form class="arm-form" method="post" action="/disarm">
+							<input type="hidden" name="csrf" value={ d.Control.CSRF }/>
+							<div class="row" style="justify-content:flex-start">
+								<button class="btn" type="submit">Disarm</button>
+								<span class="note">as { d.Control.Email }</span>
+							</div>
+						</form>
+					}
+				}
 			</div>
 		</div>
 

@@ -87,6 +87,8 @@ func New(opts Options) http.Handler {
 	mux.HandleFunc("GET /policy", s.page(ui.TabPolicy))
 	mux.HandleFunc("GET /decisions", s.page(ui.TabDecisions))
 	mux.HandleFunc("POST /arm", s.armHandler())
+	mux.HandleFunc("POST /kill", s.killHandler())
+	mux.HandleFunc("POST /disarm", s.disarmHandler())
 	mux.HandleFunc("/", s.notFound)
 	return s.withLogging(mux)
 }
@@ -119,6 +121,9 @@ func (s *server) page(tab string) http.HandlerFunc {
 		if tab == ui.TabPolicy {
 			v.Policy = s.policyReading(r.Context())
 			v.Policy.Arm = s.armReading(w, r, v)
+		}
+		if tab == ui.TabOverview {
+			v.Control = s.controlReading(w, r, v)
 		}
 		if tab == ui.TabDecisions {
 			if s.decisions == nil {

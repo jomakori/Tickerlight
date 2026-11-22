@@ -242,7 +242,7 @@ func main() {
 			os.Exit(1)
 		}
 		client := armctl.Client{URL: *engineAdminURL}
-		armOptions = &server.ArmOptions{Arm: client.Arm}
+		armOptions = &server.ArmOptions{Arm: client.Arm, Kill: client.Kill, Disarm: client.Disarm}
 		log.Info("arming control enabled", "engine", *engineAdminURL)
 	}
 

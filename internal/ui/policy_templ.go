@@ -13,10 +13,10 @@ import templruntime "github.com/a-h/templ/runtime"
 // today, and the mode, judge threshold and alert-sink state it reports running
 // under. All of it comes from one caps_status response.
 //
-// It is a reading with exactly one control: the arming window, which exists
-// only where this environment names the engine's admin URL. Nothing here can size,
-// place or cancel an order, disarm, raise a cap above the engine's ceiling, or
-// clear the kill switch.
+// It is a reading, plus one control: the arming window, which exists only where
+// this environment names the engine's admin URL. Kill and disarm are not here —
+// they live on the Overview tab. Nothing here can size, place or cancel an
+// order, raise a cap above the engine's ceiling, or clear the kill switch.
 func Policy(d PolicyData) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -195,7 +195,7 @@ func Policy(d PolicyData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " Read-only: this panel calls caps_status and nothing else.</p></div><div class=\"card c12\"><h2>Where these numbers come from</h2><p class=\"tx2\" style=\"margin:0\">Everything on this page — caps, headroom, mode, judge threshold and alert-sink state — is read live from the engine's <span class=\"mono\">caps_status</span> tool over the loopback MCP endpoint, with the console's own engine token. The engine reports what it is actually running, so the panel has one source of truth and never infers a mode, a threshold or an alert state from the console's own environment. A field the engine does not send renders as “not reported”; absence is not evidence that the engine is in paper mode or that alerts are off.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, " Read-only: this panel calls caps_status and nothing else.</p></div><div class=\"card c12\"><h2>Where these numbers come from</h2><p class=\"tx2\" style=\"margin:0\">Everything on this page — caps, headroom, mode, judge threshold and alert-sink state — is read live from the engine's <span class=\"mono\">caps_status</span> tool over the loopback MCP endpoint, with the console's own engine token. The engine reports what it is actually running, so the panel has one source of truth and never infers a mode, a threshold or an alert state from the console's own environment. A field the engine does not send renders as “not reported”; absence is not evidence that the engine is in paper mode or that alerts are off.</p></div><div class=\"card c12\"><h2>Kill and disarm</h2><p class=\"tx2\" style=\"margin:0\">The kill switch and disarm are on the <a href=\"/\" hx-get=\"/\" hx-target=\"#view\" hx-select=\"#view\" hx-swap=\"outerHTML\" hx-push-url=\"true\">Overview</a> tab, with what the engine answered last. This page opens a window and nothing else.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
