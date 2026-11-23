@@ -33,7 +33,10 @@ Generated `*_templ.go` files are committed. Always run `templ generate` and stag
 ## Capabilities and safety
 
 - Overview, Journal with filters, per-attempt detail, Calibration, read-only Risk state, and empty states.
-- Arm/kill controls are shipped **disabled and inert**: no click handler, backing logic, or state mutation. The arming indicator is a fixed fixture value; it is never mutated or persisted. Requires explicit approval before any real control is wired.
+- Arm/kill controls are **wired and guarded**: the Policy tab opens an arming window, the Overview
+  tab kills (behind a ticked confirmation, enforced on the server as well as in the browser) and
+  disarms. Each is a form post behind the Access identity, a double-submit CSRF token and a
+  same-origin check. Removing a halt file stays a human, filesystem-only action.
 - Live Alpaca-MCP data is **not wired**. The UI reads only the local sample ledger.
 - "Sample data · paper only" is always visible in the header and cannot be dismissed.
 - No arming state is written to `localStorage`/`sessionStorage`/cookies; a page reload cannot restore it because it never existed outside the request.

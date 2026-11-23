@@ -186,8 +186,8 @@ func (s *server) armHandler() http.HandlerFunc {
 
 // killHandler trips the engine's halt file. It reuses armHandler's three
 // guards verbatim (Access identity, double-submit CSRF via csrfOK, which
-// itself checks Sec-Fetch-Site) and otherwise skips arming's form fields:
-// there is nothing to confirm or size for a kill.
+// itself checks Sec-Fetch-Site) and requires the confirmation tick; there is
+// nothing to size for a kill.
 func (s *server) killHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.arm == nil || s.arm.Kill == nil {

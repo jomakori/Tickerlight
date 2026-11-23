@@ -81,8 +81,9 @@ pre-trade check visible with the value it compared.
 The Policy panel reads the engine's own numbers instead of restating the sample ledger's: caps, the
 remaining headroom, mode, judge threshold and alert-sink status all come from the engine's
 `caps_status` tool over the loopback MCP endpoint — one response, one source of truth. It is
-read-only by construction — the console calls `caps_status` and nothing else, and has no surface
-that can arm, size, place, cancel or kill. When the engine does not answer, the panel says so and
+read-only by construction — the console calls `caps_status` and nothing else from this panel, and
+nothing here can size, place or cancel an order. Arming lives in its own form beside it, and kill and
+disarm live on the Overview tab. When the engine does not answer, the panel says so and
 shows no numbers rather than a plausible zero; a field the engine does not report renders as
 `not reported` rather than as a default.
 
@@ -167,8 +168,21 @@ Tickerlight runs on a **local sample ledger**, or on a journal file written by t
 (`--journal`). Sample mode shows paper trades; a journal mode shows whatever the engine's status
 snapshot reports, so a `live` engine is labelled as trading real funds instead of paper. There is
 no live broker, market-data feed, or model provider connected to this binary, and it has no order
-path. The console is read-only; arming and kill-switch controls render disabled and are inert
-server-side, and the chips report the engine's flags rather than changing them.
+path. The console can arm a window and can kill or disarm through the engine's admin listener; those
+are the only writes it makes, and each one is a form post guarded by the Access identity, a
+double-submit CSRF token and a same-origin check. The chips report the engine's flags rather than
+changing them.
+
+### Kill and disarm
+
+Kill trips the engine's halt file and stops dispatch. Disarm closes the arming window and leaves
+open orders and positions untouched — nothing is cancelled and nothing is flattened. Both reach the
+engine over its loopback admin listener, so a console pointed at an engine that does not expose them
+says the listener is missing instead of claiming success.
+
+**Undo of a kill is not a console action.** The halt file has no removal path in code — not a route,
+not a tool, not an agent — and removing it is filesystem access to the engine's data volume by a
+human operator. The console says so on the page rather than implying a button exists.
 
 That's deliberate: the review surfaces are the product, and they're validated against a fixed
 ledger so the numbers are reproducible before any live wiring exists.
