@@ -38,13 +38,8 @@ templ ArmCard(a ArmData) {
 				<form class="arm-form" method="post" action="/arm">
 					<input type="hidden" name="csrf" value={ a.CSRF }/>
 					<label>
-						<span>Window</span>
-						<select name="ttl_minutes">
-							<option value="15">15 minutes</option>
-							<option value="30" selected>30 minutes</option>
-							<option value="60">1 hour</option>
-							<option value="120">2 hours</option>
-						</select>
+						<span>Window (minutes, leave blank to stay armed until you disarm)</span>
+						<input type="number" name="ttl_minutes" min="1" max="5760" placeholder="blank = open-ended"/>
 					</label>
 					<label>
 						<span>Per-order cap (cents, max { armInt(a.PerOrderCeilingCents) })</span>
