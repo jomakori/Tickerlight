@@ -194,12 +194,60 @@ func TestArmRoute(t *testing.T) {
 			return armctl.Result{}, nil
 		})
 		rec := httptest.NewRecorder()
-		srv.ServeHTTP(rec, armPost("0123456789abcdef0123456789abcdef", url.Values{"confirm": {"on"}, "ttl_minutes": {"1441"}}))
+		srv.ServeHTTP(rec, armPost("0123456789abcdef0123456789abcdef", url.Values{"confirm": {"on"}, "ttl_minutes": {"5761"}}))
 		if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/policy?arm=invalid") {
 			t.Fatalf("Location = %q, want an invalid outcome", loc)
 		}
 		if called {
 			t.Fatal("engine was called for an out-of-range window")
+		}
+	})
+
+	t.Run("a blank window arms open-ended", func(t *testing.T) {
+		var got armctl.Request
+		srv := armConsole(t, func(ctx context.Context, req armctl.Request) (armctl.Result, error) {
+			got = req
+			return okArm(ctx, req)
+		})
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, armPost("0123456789abcdef0123456789abcdef", url.Values{
+			"confirm":             {"on"},
+			"ttl_minutes":         {""},
+			"per_order_cap_cents": {"2500"},
+			"daily_cap_cents":     {"10000"},
+		}))
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("status = %d, want 303 (body %q)", rec.Code, rec.Body.String())
+		}
+		if got.TTLSeconds != 0 {
+			t.Fatalf("engine request TTLSeconds = %d, want 0", got.TTLSeconds)
+		}
+		loc := rec.Header().Get("Location")
+		if loc != "/policy?arm=armed&openended=1" {
+			t.Errorf("Location = %q, want the open-ended outcome", loc)
+		}
+	})
+
+	t.Run("a zero window arms open-ended the same as blank", func(t *testing.T) {
+		var got armctl.Request
+		srv := armConsole(t, func(ctx context.Context, req armctl.Request) (armctl.Result, error) {
+			got = req
+			return okArm(ctx, req)
+		})
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, armPost("0123456789abcdef0123456789abcdef", url.Values{
+			"confirm":     {"on"},
+			"ttl_minutes": {"0"},
+		}))
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("status = %d, want 303 (body %q)", rec.Code, rec.Body.String())
+		}
+		if got.TTLSeconds != 0 {
+			t.Fatalf("engine request TTLSeconds = %d, want 0", got.TTLSeconds)
+		}
+		loc := rec.Header().Get("Location")
+		if loc != "/policy?arm=armed&openended=1" {
+			t.Errorf("Location = %q, want the open-ended outcome", loc)
 		}
 	})
 }

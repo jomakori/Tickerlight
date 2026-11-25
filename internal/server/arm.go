@@ -145,9 +145,9 @@ func (s *server) armHandler() http.HandlerFunc {
 			return
 		}
 
-		ttlMinutes, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("ttl_minutes")))
-		if err != nil || ttlMinutes <= 0 || ttlMinutes > 24*60 {
-			redirectArm(w, r, "invalid", "the window must be between 1 and 1440 minutes")
+		ttlSeconds, err := parseTTLSeconds(r.PostFormValue("ttl_minutes"))
+		if err != nil {
+			redirectArm(w, r, "invalid", "the window must be between 1 and 5760 minutes")
 			return
 		}
 		perOrder, err := parseOptionalCents(r.PostFormValue("per_order_cap_cents"))
@@ -164,7 +164,7 @@ func (s *server) armHandler() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), armTimeout)
 		defer cancel()
 		res, err := s.arm.Arm(ctx, armctl.Request{
-			TTLSeconds:       ttlMinutes * 60,
+			TTLSeconds:       ttlSeconds,
 			PerOrderCapCents: perOrder,
 			DailyCapCents:    daily,
 		})
@@ -176,10 +176,15 @@ func (s *server) armHandler() http.HandlerFunc {
 			redirectArm(w, r, "refused", err.Error())
 			return
 		}
-		s.log.Info("arming window written", "email", email, "expires_at", res.ExpiresAt)
 		q := url.Values{}
 		q.Set("arm", "armed")
-		q.Set("until", res.ExpiresAt.UTC().Format(time.RFC3339))
+		if ttlSeconds == 0 {
+			s.log.Info("arming window written", "email", email, "open_ended", true)
+			q.Set("openended", "1")
+		} else {
+			s.log.Info("arming window written", "email", email, "expires_at", res.ExpiresAt)
+			q.Set("until", res.ExpiresAt.UTC().Format(time.RFC3339))
+		}
 		http.Redirect(w, r, "/policy?"+q.Encode(), http.StatusSeeOther)
 	}
 }
@@ -275,6 +280,22 @@ func ctlQuery(action, status, journalError string) url.Values {
 		q.Set("journal_error", journalError)
 	}
 	return q
+}
+
+// parseTTLSeconds reads the arming window field. A blank value or "0" means
+// open-ended — armed until the operator disarms or kills (the engine caps it
+// at four days), sent to the engine as TTLSeconds 0. Any other value must be
+// a whole number of minutes in 1..5760, converted to seconds.
+func parseTTLSeconds(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "0" {
+		return 0, nil
+	}
+	minutes, err := strconv.Atoi(raw)
+	if err != nil || minutes <= 0 || minutes > 4*24*60 {
+		return 0, errors.New("invalid ttl")
+	}
+	return minutes * 60, nil
 }
 
 // parseOptionalCents treats an empty field as "the engine's ceiling".
@@ -377,9 +398,13 @@ func (s *server) armReading(w http.ResponseWriter, r *http.Request, v ui.View) u
 	q := r.URL.Query()
 	switch q.Get("arm") {
 	case "armed":
-		d.Notice = "Arming window written."
-		if until, err := time.Parse(time.RFC3339, q.Get("until")); err == nil {
-			d.ArmedUntil = until
+		if q.Get("openended") == "1" {
+			d.Notice = "Arming window opened - armed until you disarm"
+		} else {
+			d.Notice = "Arming window written."
+			if until, err := time.Parse(time.RFC3339, q.Get("until")); err == nil {
+				d.ArmedUntil = until
+			}
 		}
 	case "killed":
 		d.Error = "Refused: " + q.Get("msg")
