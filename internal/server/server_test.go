@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -325,6 +326,117 @@ func TestStaticAssetsServe(t *testing.T) {
 	}
 	if res := get(t, h, "/static/missing.css"); res.status != http.StatusNotFound {
 		t.Errorf("missing asset = %d, want 404", res.status)
+	}
+}
+
+func TestManifestMakesTheConsoleInstallable(t *testing.T) {
+	h := fixture(t)
+	res := get(t, h, "/static/manifest.json")
+	if res.status != http.StatusOK {
+		t.Fatalf("/static/manifest.json = %d, want 200", res.status)
+	}
+	var m struct {
+		Name        string `json:"name"`
+		ShortName   string `json:"short_name"`
+		StartURL    string `json:"start_url"`
+		Scope       string `json:"scope"`
+		Display     string `json:"display"`
+		ThemeColor  string `json:"theme_color"`
+		BackgroundC string `json:"background_color"`
+		Icons       []struct {
+			Src     string `json:"src"`
+			Sizes   string `json:"sizes"`
+			Type    string `json:"type"`
+			Purpose string `json:"purpose"`
+		} `json:"icons"`
+	}
+	if err := json.Unmarshal([]byte(res.body), &m); err != nil {
+		t.Fatalf("manifest is not valid JSON: %v", err)
+	}
+	if m.Name == "" || m.ShortName == "" {
+		t.Errorf("manifest needs name and short_name, got %q / %q", m.Name, m.ShortName)
+	}
+	if m.StartURL != "/" || m.Scope != "/" {
+		t.Errorf("start_url/scope = %q/%q, want / and /", m.StartURL, m.Scope)
+	}
+	if m.Display != "standalone" {
+		t.Errorf("display = %q, want standalone", m.Display)
+	}
+	if m.ThemeColor == "" || m.BackgroundC == "" {
+		t.Errorf("theme_color/background_color must be set, got %q/%q", m.ThemeColor, m.BackgroundC)
+	}
+	// A browser only offers install once it has a 192 and a 512 raster icon.
+	var got192, got512, maskable bool
+	for _, ic := range m.Icons {
+		if ic.Type != "image/png" {
+			t.Errorf("icon %q type = %q, want image/png", ic.Src, ic.Type)
+		}
+		if icon := get(t, h, ic.Src); icon.status != http.StatusOK || len(icon.body) == 0 {
+			t.Errorf("icon %q = %d, body %d bytes", ic.Src, icon.status, len(icon.body))
+		}
+		switch ic.Sizes {
+		case "192x192":
+			got192 = true
+		case "512x512":
+			got512 = true
+			if ic.Purpose == "maskable" {
+				maskable = true
+			}
+		}
+	}
+	if !got192 || !got512 {
+		t.Errorf("icons need 192x192 and 512x512, got %v/%v", got192, got512)
+	}
+	if !maskable {
+		t.Error("one 512x512 icon should be maskable")
+	}
+}
+
+func TestServiceWorkerServesFromRootScope(t *testing.T) {
+	h := fixture(t)
+	res := get(t, h, "/sw.js")
+	if res.status != http.StatusOK {
+		t.Fatalf("/sw.js = %d, want 200", res.status)
+	}
+	if ct := res.header.Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Errorf("content type = %q, want javascript", ct)
+	}
+	// A cached worker would pin the client to an old inbox of behaviour.
+	if cc := res.header.Get("Cache-Control"); !strings.Contains(cc, "no-cache") {
+		t.Errorf("cache control = %q, want no-cache", cc)
+	}
+	if allowed := res.header.Get("Service-Worker-Allowed"); allowed != "/" {
+		t.Errorf("service-worker-allowed = %q, want /", allowed)
+	}
+	if !strings.Contains(res.body, `addEventListener("fetch"`) {
+		t.Error("worker has no fetch handler, so browsers will not offer install")
+	}
+	// The engine state is what the console exists to show; caching it would be
+	// worse than not installing at all.
+	for _, banned := range []string{"caches.open", "cache.put"} {
+		if strings.Contains(res.body, banned) {
+			t.Errorf("worker caches responses (%q); arm state must always be live", banned)
+		}
+	}
+}
+
+func TestPagesAdvertiseTheInstallableApp(t *testing.T) {
+	h := fixture(t)
+	for _, path := range []string{"/", "/policy"} {
+		res := get(t, h, path)
+		if res.status != http.StatusOK {
+			t.Fatalf("%s = %d", path, res.status)
+		}
+		for _, want := range []string{
+			`rel="manifest" href="/static/manifest.json"`,
+			`name="theme-color"`,
+			`rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"`,
+			`name="apple-mobile-web-app-capable" content="yes"`,
+		} {
+			if !strings.Contains(res.body, want) {
+				t.Errorf("%s is missing %s", path, want)
+			}
+		}
 	}
 }
 

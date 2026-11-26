@@ -124,4 +124,13 @@
     initCooldowns(e.target);
     document.body.classList.toggle("has-detail", Boolean($("#detail-pane[data-open='true']")));
   });
+
+  /* ---------- installable app ---------- */
+  // Registered from the root so the worker's scope covers every panel; it
+  // caches nothing, so a stale arm state can never be shown.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    });
+  }
 })();

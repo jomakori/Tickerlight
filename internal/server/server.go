@@ -76,6 +76,7 @@ func New(opts Options) http.Handler {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServer(web.Static()))))
+	mux.HandleFunc("GET /sw.js", serviceWorkerHandler)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
@@ -247,6 +248,15 @@ type recorder struct {
 func (r *recorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+// serviceWorkerHandler serves the root-scoped worker. It is deliberately not
+// cached: browsers only pick up a new worker after revalidating this response.
+func serviceWorkerHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Service-Worker-Allowed", "/")
+	_, _ = w.Write(web.ServiceWorker())
 }
 
 // cacheStatic marks assets immutable but revalidating; the filenames are fixed
