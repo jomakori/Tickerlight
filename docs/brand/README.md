@@ -7,8 +7,8 @@ dark surface, the T is the machine's face, and the lime is the only light on the
 - `mark-app.svg` — app icon master: `#060807` canvas, lime tile, T knocked out
 - `mark-maskable.svg` — full-bleed lime, T inside the 80% safe circle
 - `mark-mono.svg` — one-colour version, ink tile, T knocked out
-- `round4/wordmark-light.svg` — `tickerlight`, outlined from DejaVu Sans Mono, one lime dot
-- `round4/wordmark-ink.svg` — the same outlines, single ink, for print and light surfaces
+- `wordmark-light.svg` — `tickerlight`, outlined from DejaVu Sans Mono, one lime dot
+- `wordmark-ink.svg` — the same outlines, single ink, for print and light surfaces
 - `mark-proof.png` — asset proof: lockup, PWA sizes, maskable crops, favicon
 
 ## Shipped assets
@@ -46,4 +46,7 @@ ink dot — one light per wordmark, not two.
   rocket, or a candle chart; several died at 24 px.
 - Round 3: five stacked prints (misregistration at 24 px), raised print in a tape gap
   (lump at 16 px), capsule switch (phone toggle), T with chisel foot (decoration),
-  T in tile (kept — this is it), sheared-arm T (kept as an alternative, not chosen).
+  T in tile (kept — this is it), sheared-arm T (dropped: read as a switch or a slider).
+
+Only the chosen marks live in this directory. The rejected rounds are in the history of
+this file, not in the tree.
