@@ -39,6 +39,8 @@ button:disabled{cursor:not-allowed;opacity:.5}
 .side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:24px;padding:20px 12px;border-right:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:12px;padding:0 8px;font-weight:700;font-size:15px;letter-spacing:.01em}
 .brand span{color:var(--lbl);font-weight:500}
+.brand img{display:block;flex:none}
+.brandword{height:15px;width:auto}
 .tabs{display:flex;flex-direction:column;gap:4px}
 .tabs .tablink{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border:0;border-radius:var(--ri);background:transparent;color:var(--tx2);font-weight:600;text-align:left;transition:background var(--t),color var(--t)}
 .tabs .tablink:hover{background:var(--s2);color:var(--tx)}
@@ -202,7 +204,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:24px}
 @media (max-width:1180px){
   .shell{grid-template-columns:72px minmax(0,1fr)}
   .side{padding:20px 8px;align-items:center}
-  .brand span,.tabs .tablink .tl,.sess{display:none}
+  .brand span,.brand .brandword,.tabs .tablink .tl,.sess{display:none}
   .brand{padding:0}
   .tabs .tablink{justify-content:center;padding:0;width:48px}
   .c8,.c4{grid-column:span 12}

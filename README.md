@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/banner.svg" alt="Tickerlight — every trade explained, every AI decision scored" width="100%">
+<img src="docs/assets/banner.svg" alt="Tickerlight — paper-trading engine and ops console" width="100%">
 
 <p align="center">
   <img src="https://img.shields.io/github/license/jomakori/Tickerlight?logo=apache&logoColor=white&label=License" alt="License">
