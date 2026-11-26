@@ -22,7 +22,9 @@ templ Layout(v View) {
 			<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 			<link rel="manifest" href="/static/manifest.json"/>
 			<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"/>
-			<link rel="icon" type="image/png" href="/static/icons/icon-192.png"/>
+			<link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg"/>
+			<link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png"/>
+			<link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png"/>
 			<link rel="stylesheet" href="/static/styles.css"/>
 			<script src="/static/htmx.min.js" defer></script>
 			<script src="/static/app.js" defer></script>
@@ -30,7 +32,11 @@ templ Layout(v View) {
 		<body>
 			<div class="shell">
 				<aside class="side">
-					<div class="brand" aria-hidden="true">Tickerlight <span>ops</span></div>
+					<div class="brand">
+						<img src="/static/icons/mark.svg" width="21" height="21" alt=""/>
+						<img class="brandword" src="/static/icons/wordmark.svg" height="15" alt="Tickerlight"/>
+						<span>ops</span>
+					</div>
 					@nav(v)
 					<div class="sess" aria-label="Session">
 						<span class="lbl">Session</span>

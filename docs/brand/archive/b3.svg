@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Top horizontal rule -->
+  <path d="M 70 200 L 442 200 L 442 218 L 70 218 Z" fill="#E8EDE6"/>
+
+  <!-- Bottom horizontal rule -->
+  <path d="M 70 290 L 442 290 L 442 308 L 70 308 Z" fill="#E8EDE6"/>
+
+  <!-- Rising vertical bar: passes through the gap -->
+  <path d="M 236 310 L 236 150 L 276 150 L 276 310 Z" fill="#E8EDE6"/>
+
+  <!-- Lit band at the crossing: the threshold level where the bar passes -->
+  <path d="M 236 245 L 276 245 L 276 265 L 236 265 Z" fill="#D2F23C"/>
+</svg>

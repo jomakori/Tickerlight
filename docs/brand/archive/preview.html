@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tickerlight — mark concepts</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #060807;
+    color: #E8EDE6;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    width: 1440px;
+    height: 1100px;
+    overflow: hidden;
+  }
+  body {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    padding: 28px;
+  }
+  .col {
+    background: #0D100F;
+    border: 1px solid #1F2622;
+    border-radius: 6px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .head { width: 100%; text-align: left; }
+  .letter {
+    display: inline-block;
+    color: #D2F23C;
+    font-size: 20px;
+    font-weight: bold;
+    margin-right: 8px;
+  }
+  .name { font-size: 13px; color: #7C8A80; letter-spacing: 0.02em; }
+  .hero-wrap {
+    width: 260px;
+    height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hero-wrap img { width: 100%; height: 100%; display: block; }
+  .row { display: flex; gap: 16px; align-items: flex-end; justify-content: center; width: 100%; }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .swatch img { display: block; }
+  .cap { font-size: 10px; color: #7C8A80; text-transform: uppercase; letter-spacing: 0.04em; }
+  .gray img { filter: grayscale(1); }
+  .white-box {
+    background: #ffffff;
+    border-radius: 4px;
+    width: 96px;
+    height: 96px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+</style>
+</head>
+<body>
+
+  <div class="col">
+    <div class="head"><span class="letter">A</span><span class="name">Ticker Tape &amp; Flare</span></div>
+    <div class="hero-wrap"><img src="logo-a.svg" alt="Concept A hero"></div>
+    <div class="row">
+      <div class="swatch"><img src="logo-a.svg" width="128" height="128" alt="Concept A 128px"><span class="cap">128px</span></div>
+      <div class="swatch"><img src="logo-a.svg" width="32" height="32" alt="Concept A 32px"><span class="cap">32px</span></div>
+    </div>
+    <div class="row">
+      <div class="swatch gray"><img src="logo-a.svg" width="96" height="96" alt="Concept A grayscale"><span class="cap">grayscale</span></div>
+      <div class="swatch"><div class="white-box"><img src="logo-a.svg" width="64" height="64" alt="Concept A on white"></div><span class="cap">on white · 64px</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="head"><span class="letter">B</span><span class="name">Threshold Gate</span></div>
+    <div class="hero-wrap"><img src="logo-b.svg" alt="Concept B hero"></div>
+    <div class="row">
+      <div class="swatch"><img src="logo-b.svg" width="128" height="128" alt="Concept B 128px"><span class="cap">128px</span></div>
+      <div class="swatch"><img src="logo-b.svg" width="32" height="32" alt="Concept B 32px"><span class="cap">32px</span></div>
+    </div>
+    <div class="row">
+      <div class="swatch gray"><img src="logo-b.svg" width="96" height="96" alt="Concept B grayscale"><span class="cap">grayscale</span></div>
+      <div class="swatch"><div class="white-box"><img src="logo-b.svg" width="64" height="64" alt="Concept B on white"></div><span class="cap">on white · 64px</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="head"><span class="letter">C</span><span class="name">Aperture / Tick Ring</span></div>
+    <div class="hero-wrap"><img src="logo-c.svg" alt="Concept C hero"></div>
+    <div class="row">
+      <div class="swatch"><img src="logo-c.svg" width="128" height="128" alt="Concept C 128px"><span class="cap">128px</span></div>
+      <div class="swatch"><img src="logo-c.svg" width="32" height="32" alt="Concept C 32px"><span class="cap">32px</span></div>
+    </div>
+    <div class="row">
+      <div class="swatch gray"><img src="logo-c.svg" width="96" height="96" alt="Concept C grayscale"><span class="cap">grayscale</span></div>
+      <div class="swatch"><div class="white-box"><img src="logo-c.svg" width="64" height="64" alt="Concept C on white"></div><span class="cap">on white · 64px</span></div>
+    </div>
+  </div>
+
+</body>
+</html>
