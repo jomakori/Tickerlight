@@ -1,31 +1,24 @@
 ---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-merge-conflict
       - id: trailing-whitespace
       - id: check-added-large-files
       - id: end-of-file-fixer
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.24.0
+    rev: v8.30.1
     hooks:
       - id: gitleaks
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.37.1
+    rev: v1.38.0
     hooks:
       - id: yamllint
   - repo: local
     hooks:
       - id: templ-generate
         name: templ generate (generated Go in sync)
-        description: |
-          Regenerate *_templ.go from the .templ sources and fail when the
-          result differs from what is staged. Without this, a .templ edit
-          lands with stale generated code and the binary renders the old
-          markup while the source reads correct.
-
-          Run `templ generate` and re-stage the *_templ.go files to fix.
         entry: >
           bash -c 'templ generate >/dev/null &&
           git diff --quiet -- "*.go"'
@@ -34,9 +27,6 @@ repos:
         pass_filenames: false
       - id: gofmt
         name: gofmt (staged Go files are formatted)
-        description: |
-          Fail when a staged Go file is not gofmt-clean. `gofmt -w` would
-          silently rewrite the file and let the commit through unformatted.
         entry: >
           bash -c 'bad=$(gofmt -l "$@");
           if [ -n "$bad" ]; then
