@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   packages: write
@@ -45,9 +49,11 @@ jobs:
           set -euo pipefail
           current="$(svu current)"
           next="$(svu next)"
+          echo "current=$current next=$next" >> "$GITHUB_STEP_SUMMARY"
           if [ "$current" = "$next" ]; then
             if git rev-parse -q --verify "refs/tags/$current" >/dev/null \
               && ! gh release view "$current" >/dev/null 2>&1; then
+              echo "Resuming unpublished $current." >> "$GITHUB_STEP_SUMMARY"
               echo "version=$current" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -89,7 +95,7 @@ jobs:
         if: steps.tag.outputs.version != ''
         env:
           TAG: ${{ steps.tag.outputs.version }}
-        run: gh release create "$TAG" --generate-notes --latest
+        run: gh release create "$TAG" --generate-notes --latest --verify-tag
 
   deploy:
     name: Deploy Release
@@ -128,4 +134,5 @@ jobs:
             -c user.email="release@users.noreply.github.com" \
             commit -q -am "chore(apps): pin tickerlight prod to ${TAG}"
           git push -q origin HEAD:main
+          echo "Prod pinned to ${TAG}." >> "$GITHUB_STEP_SUMMARY"
           echo "pinned tickerlight production to ${TAG}"
