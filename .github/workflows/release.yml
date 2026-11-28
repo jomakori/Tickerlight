@@ -26,17 +26,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v4.0.1
-
-      - name: Fetch Doppler Secrets
-        id: doppler
-        uses: dopplerhq/secrets-fetch-action@v2.0.0
-        with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          inject-env-vars: true
-
       - name: Install svu
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release download -R caarlos0/svu -p 'svu_*_linux_amd64.tar.gz' \
             -D "$RUNNER_TEMP/svu" --clobber
@@ -45,6 +37,8 @@ jobs:
 
       - name: Tag the next version
         id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           current="$(svu current)"
@@ -74,7 +68,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ steps.doppler.outputs.GITHUB_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push the image
         if: steps.tag.outputs.version != ''
@@ -94,6 +88,7 @@ jobs:
       - name: Publish the release
         if: steps.tag.outputs.version != ''
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.version }}
         run: gh release create "$TAG" --generate-notes --latest --verify-tag
 
@@ -104,17 +99,24 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - name: Fetch Doppler Secrets
-        id: doppler
-        uses: dopplerhq/secrets-fetch-action@v2.0.0
-        with:
-          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v4.0.1
+
+      - name: Fetch the GitOps token
+        id: pat
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          set -euo pipefail
+          token="$(doppler secrets get GITHUB_TOKEN --plain --project devops --config ci)"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
 
       - name: Checkout the GitOps repo
         uses: actions/checkout@v7
         with:
           repository: jomakori/gke_GitOps
-          token: ${{ steps.doppler.outputs.GITHUB_TOKEN }}
+          token: ${{ steps.pat.outputs.token }}
           ref: main
           path: gitops
 
