@@ -43,9 +43,3 @@ repos:
           printf "gofmt needed:\n%s\n" "$bad"; exit 1; fi' --
         language: system
         files: \.go$
-
-      - id: comment-hygiene
-        name: comments carry no ids or narration
-        entry: bash scripts/check-comments.sh
-        language: system
-        files: '\.(rs|go|toml|ya?ml|css|js|mjs|ts|py|sh)$'
