@@ -1,45 +1,35 @@
-# Build stage
 FROM golang:1.27-alpine AS builder
 
 WORKDIR /build
 
-# Copy go mod files
 COPY go.mod go.sum ./
 
-# Download dependencies
 RUN go mod download
 
-# Copy source
 COPY . .
 
-# Build binary with security/size flags
 RUN CGO_ENABLED=0 go build \
     -trimpath \
     -ldflags="-s -w" \
     -o /tmp/tickerlight \
     ./cmd/tickerlight
 
-# Jev-driven decider ships in the same image; the sidecar selects it by command.
 RUN CGO_ENABLED=0 go build \
     -trimpath \
     -ldflags="-s -w" \
     -o /tmp/trading-decider \
     ./cmd/trading-decider
 
-# Runtime stage
+# allow: the image ships both binaries; the sidecar selects the decider by command
 FROM alpine:3.21
 
-# Install CA certificates for HTTPS support
 RUN apk add --no-cache ca-certificates
 
-# Create non-root user (uid 65532 is the standard nonroot in distroless)
 RUN addgroup -g 65532 app && adduser -D -u 65532 -G app app
 
-# Copy binary from builder
 COPY --from=builder /tmp/tickerlight /usr/local/bin/tickerlight
 COPY --from=builder /tmp/trading-decider /usr/local/bin/trading-decider
 
-# Switch to non-root user
 USER 65532:65532
 
 EXPOSE 8080

@@ -1,12 +1,3 @@
-# .pre-commit-config.yaml
-#
-# Install once per clone:  pre-commit install
-# Run on everything:       pre-commit run --all-files
-#
-# Hooks are deliberately cheap: text hygiene, secret scanning, and a check
-# that the templ code generator output matches the committed .templ sources.
-# Slower Go gates (go build, go test) live in the normal dev loop and CI, not
-# in the pre-commit path.
 ---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
